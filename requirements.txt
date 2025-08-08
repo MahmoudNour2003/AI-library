@@ -3,5 +3,6 @@ PyMuPDF
 lxml
 sentence-transformers==2.2.2
 transformers==4.28.1
-torch==1.13.1
+torch==2.2.2
 faiss-cpu==1.7.2
+
