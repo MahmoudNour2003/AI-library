@@ -7,3 +7,6 @@ transformers==4.28.1
 torch==1.13.1
 huggingface_hub==0.14.1
 faiss-cpu==1.7.4
+markdown-it-py==3.0.0
+rich==14.1.0
+pygments==2.19.2
