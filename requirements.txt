@@ -1,9 +1,7 @@
-streamlit==1.35.0
 pymarc
 PyMuPDF
 lxml
 sentence-transformers==2.2.2
 transformers==4.28.1
 torch==1.13.1
-huggingface_hub==0.14.1
-faiss-cpu==1.7.2  # works on Python 3.9
+faiss-cpu==1.7.2
