@@ -8,4 +8,4 @@ sentence-transformers==2.2.2
 faiss-cpu==1.7.4
 # Optional: Only add ipython if you really need it
 ipython==8.18.1
-huggingface_hub==0.20.3
+
