@@ -1,11 +1,9 @@
 streamlit==1.35.0
-pymarc== 5.0.0
-lxml==4.9.3
-requests==2.31.0
-PyMuPDF==1.23.19
-langdetect==1.0.9
+pymarc
+PyMuPDF
+lxml
 sentence-transformers==2.2.2
+transformers==4.28.1
+torch==1.13.1
+huggingface_hub==0.14.1
 faiss-cpu==1.7.4
-# Optional: Only add ipython if you really need it
-ipython==8.18.1
-
