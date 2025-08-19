@@ -851,8 +851,9 @@ def read_marc_file_cached(file_path):
         return f"Error reading MARC file: {str(e)}"
 
 # ─────────────────────────────────────────────
-# 📄 Tab 2: PDF to MARC
-import base64
+# ─────────────────────────────────────────────
+# 📄 Tab 2: PDF or Image to MARC
+# ─────────────────────────────────────────────
 with tab2:
     st.subheader("📄 PDF/Image to MARC File")
     st.write("Upload a PDF or an Image to generate MARC records")
@@ -903,7 +904,7 @@ with tab2:
                     st.info("Extracting text snippet...")
                     text = extract_text_from_pdf(temp_pdf)
                     st.info("Extracting metadata with AI...")
-                    prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON (no explanation):\n- title\n- authors (full names)\n\nText:\n{text}"""
+                    prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON (no explanation):\n- title\n- authors (full names)\n- publisher\n- publication year\n- language\n- isbn (if present)\n- doi (if present)\n- abstract\n\nText:\n{text}"""
                     llm_response = ask_groq_model(prompt, api_key)
                     llm_metadata = extract_json_block(llm_response)
 
@@ -955,7 +956,8 @@ with tab2:
                 with open(st.session_state.marc_xml_path, "r", encoding="utf-8") as f:
                     st.download_button("Download MARC XML (.xml)", f,
                         file_name=f"{st.session_state.base_filename}.xml")
-# ============ Image Workflow ============
+
+    # ============ Image Workflow ============
     elif file_type == "Image":
         uploaded_image = st.file_uploader("Choose an image", type=["png", "jpg", "jpeg"])
         if uploaded_image:
@@ -966,47 +968,32 @@ with tab2:
             with open(temp_image_path, "wb") as f:
                 f.write(uploaded_image.getbuffer())
 
-            with st.spinner("Extracting full bibliographic metadata from image with AI..."):
-                with open(temp_image_path, "rb") as img_file:
-                    img_b64 = base64.b64encode(img_file.read()).decode("utf-8")
-
-                # Prompt to Groq API: ask for complete metadata
-                prompt = f"""
-                You are a librarian assistant. Extract complete bibliographic metadata
-                from the following academic book/journal image. Return ONLY valid JSON
-                with these keys:
-                - title
-                - authors (list of full names)
-                - publisher
-                - publication year
-                - language
-                - isbn (if present)
-                - doi (if present)
-                - abstract (if visible)
-                
-                Image:
-                ![image](data:image/png;base64,{img_b64})
-                """
-
+            with st.spinner("Extracting text from image..."):
                 try:
+                    # Convert image → PDF → try text extraction
+                    img_doc = fitz.open()
+                    img_page = img_doc.new_page(width=595, height=842)  # A4
+                    img_rect = fitz.Rect(0, 0, 595, 842)
+                    img_page.insert_image(img_rect, filename=temp_image_path)
+                    temp_pdf_from_img = os.path.join("temp", f"{base_filename}_from_img.pdf")
+                    img_doc.save(temp_pdf_from_img)
+                    img_doc.close()
+
+                    # Extract text with PyMuPDF (works only if embedded text exists)
+                    text = extract_text_from_pdf(temp_pdf_from_img)
+
+                    if not text.strip():
+                        st.warning("⚠ No extractable text found in this image. The record may be incomplete.")
+
+                    st.info("Extracting metadata with AI...")
+                    prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON (no explanation):\n- title\n- authors (full names)\n- publisher\n- publication year\n- language\n- isbn (if present)\n- doi (if present)\n- abstract\n\nText:\n{text}"""
                     llm_response = ask_groq_model(prompt, api_key)
                     llm_metadata = extract_json_block(llm_response)
 
-                    # Minimal TEI (since we don’t have one for images)
-                    tei = "<TEI></TEI>"
-
-                    # File paths
-                    marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
-                    marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
-                    marc_xml_path = os.path.join(output_dir, f"{base_filename}.xml")
-                    xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
-
                     st.info("Generating MARC records...")
                     record, marc_bin_path, marc_txt_path, marc_xml_path = metadata_to_marc(
-                    llm_metadata, base_filename, output_dir
+                        llm_metadata, base_filename, output_dir
                     )
-                    if os.path.exists(marc_xml_path):
-                        shutil.copy2(marc_xml_path, xml_db_path)
 
                     st.success("✅ MARC records generated successfully from image!")
                     st.subheader("Extracted Metadata")
