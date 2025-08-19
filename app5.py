@@ -121,34 +121,55 @@ def metadata_to_marc(llm_metadata, output_basename, output_dir="output"):
 
     # Title (245)
     title = llm_metadata.get("title", "Untitled")
-    record.add_field(Field(tag="245", indicators=["1", "0"], subfields=["a", title]))
+    record.add_field(Field(
+        tag="245", indicators=["1", "0"],
+        subfields=[Subfield("a", title)]
+    ))
 
     # Authors (100 for first, 700 for others)
     authors = llm_metadata.get("authors", [])
     if authors:
-        record.add_field(Field(tag="100", indicators=["1", " "], subfields=["a", authors[0]]))
+        record.add_field(Field(
+            tag="100", indicators=["1", " "],
+            subfields=[Subfield("a", authors[0])]
+        ))
         for author in authors[1:]:
-            record.add_field(Field(tag="700", indicators=["1", " "], subfields=["a", author]))
+            record.add_field(Field(
+                tag="700", indicators=["1", " "],
+                subfields=[Subfield("a", author)]
+            ))
 
     # Publisher + Year (264)
     publisher = llm_metadata.get("publisher", "")
-    record.add_field(Field(tag="264", indicators=[" ", "1"], subfields=[
-        "a", "xx", 
-        "b", publisher, 
-        "c", pub_year
-    ]))
+    record.add_field(Field(
+        tag="264", indicators=[" ", "1"],
+        subfields=[
+            Subfield("a", "xx"),
+            Subfield("b", publisher),
+            Subfield("c", pub_year)
+        ]
+    ))
 
     # ISBN (020)
     if "isbn" in llm_metadata and llm_metadata["isbn"]:
-        record.add_field(Field(tag="020", subfields=["a", llm_metadata["isbn"]]))
+        record.add_field(Field(tag="020", subfields=[Subfield("a", llm_metadata["isbn"])]))
 
     # DOI (024)
     if "doi" in llm_metadata and llm_metadata["doi"]:
-        record.add_field(Field(tag="024", indicators=["7", " "], subfields=["a", llm_metadata["doi"], "2", "doi"]))
+        record.add_field(Field(
+            tag="024", indicators=["7", " "],
+            subfields=[
+                Subfield("a", llm_metadata["doi"]),
+                Subfield("2", "doi")
+            ]
+        ))
 
     # Abstract (520)
     if "abstract" in llm_metadata and llm_metadata["abstract"]:
-        record.add_field(Field(tag="520", indicators=[" ", " "], subfields=["a", llm_metadata["abstract"]]))
+        record.add_field(Field(
+            tag="520", indicators=[" ", " "],
+            subfields=[Subfield("a", llm_metadata["abstract"])]
+        ))
 
     # Save MARC in 3 formats
     with open(marc_bin_path, "wb") as f:
