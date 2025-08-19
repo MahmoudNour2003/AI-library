@@ -20,7 +20,8 @@ import faiss
 from sentence_transformers import SentenceTransformer
 import pickle
 import base64
-from Image import PIL
+from PIL import Image
+
 # --- Directory and Path Configuration ---
 output_dir = "output"
 XML_DB_DIR = "xml_database"
