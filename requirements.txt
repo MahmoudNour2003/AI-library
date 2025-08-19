@@ -8,3 +8,5 @@ torch>=2.5.0
 faiss-cpu>=1.8.0
 langdetect>=1.0.9
 Pillow==10.3.0
+easyocr==1.7.1
+torchvision==0.17.2

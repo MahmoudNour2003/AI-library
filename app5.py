@@ -19,7 +19,7 @@ import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
 import pickle
-import base64
+import easyocr
 from PIL import Image
 
 # --- Directory and Path Configuration ---
@@ -97,15 +97,8 @@ def extract_text_from_pdf(pdf_path, max_chars=1500):
             break
     return text[:max_chars]
 
-
-
-def compress_image(uploaded_image, max_size=(800, 800), quality=50):
-    """Compress image to avoid Groq token limit issues."""
-    img = Image.open(uploaded_image)
-    img.thumbnail(max_size)
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=quality)
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
+def load_ocr_reader():
+    return easyocr.Reader(['en'], gpu=False)
 
 def metadata_to_marc(llm_metadata, output_basename, output_dir="output"):
     os.makedirs(output_dir, exist_ok=True)
@@ -1001,38 +994,29 @@ with tab2:
 
             with st.spinner("Extracting text from image..."):
                 try:
-                    # Wrap image in a PDF page
+                    # Try PyMuPDF (wrap image into PDF)
                     img_doc = fitz.open()
-                    img_page = img_doc.new_page(width=595, height=842)  # A4 size
+                    img_page = img_doc.new_page(width=595, height=842)
                     img_rect = fitz.Rect(0, 0, 595, 842)
                     img_page.insert_image(img_rect, filename=temp_image_path)
                     temp_pdf_from_img = os.path.join("temp", f"{base_filename}_from_img.pdf")
                     img_doc.save(temp_pdf_from_img)
                     img_doc.close()
 
-                    # Try extracting text
                     text = extract_text_from_pdf(temp_pdf_from_img)
 
+                    # If no text, fallback to easyocr
                     if not text.strip():
-                        st.warning("⚠ No extractable text found. Falling back to Groq image reading...")
-                        img_b64 = compress_image(uploaded_image)
-                        prompt = f"""
-    This is a photo of a bibliographic catalog entry. 
-    Extract the following metadata and return ONLY valid JSON:
-    - title
-    - authors
-    - publisher
-    - publication year
-    - isbn
-    - subjects
-    - call_number
+                        st.warning("⚠ No extractable text found in PDF layer. Using OCR fallback...")
+                        reader = load_ocr_reader()
+                        results = reader.readtext(temp_image_path, detail=0)  # detail=0 → text only
+                        text = "\n".join(results)
 
-    Image (base64, compressed):
-    {img_b64}
-    """
+                    if not text.strip():
+                        st.error("❌ OCR also failed to extract text. Record may be incomplete.")
                     else:
                         st.info("✅ Text extracted, sending to Groq...")
-                        prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON (no explanation):
+                        prompt = f"""Extract the following metadata from this bibliographic entry and return ONLY valid JSON (no explanation):
     - title
     - authors
     - publisher
@@ -1047,29 +1031,29 @@ with tab2:
     Text:
     {text}"""
 
-                    llm_response = ask_groq_model(prompt, api_key)
-                    llm_metadata = extract_json_block(llm_response)
+                        llm_response = ask_groq_model(prompt, api_key)
+                        llm_metadata = extract_json_block(llm_response)
 
-                    st.info("Generating MARC records...")
-                    record, marc_bin_path, marc_txt_path, marc_xml_path = metadata_to_marc(
-                        llm_metadata, base_filename, output_dir
-                    )
+                        st.info("Generating MARC records...")
+                        record, marc_bin_path, marc_txt_path, marc_xml_path = metadata_to_marc(
+                            llm_metadata, base_filename, output_dir
+                        )
 
-                    st.success("✅ MARC records generated successfully from image!")
-                    st.subheader("Extracted Metadata")
-                    st.json(llm_metadata)
+                        st.success("✅ MARC records generated successfully from image!")
+                        st.subheader("Extracted Metadata")
+                        st.json(llm_metadata)
 
-                    st.subheader("Download MARC Records")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        with open(marc_bin_path, "rb") as f:
-                            st.download_button("Download MARC (.mrc)", f, file_name=f"{base_filename}.mrc")
-                    with col2:
-                        with open(marc_txt_path, "r", encoding="utf-8") as f:
-                            st.download_button("Download Text MARC (.txt)", f, file_name=f"{base_filename}.txt")
-                    with col3:
-                        with open(marc_xml_path, "r", encoding="utf-8") as f:
-                            st.download_button("Download MARC XML (.xml)", f, file_name=f"{base_filename}.xml")
+                        st.subheader("Download MARC Records")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            with open(marc_bin_path, "rb") as f:
+                                st.download_button("Download MARC (.mrc)", f, file_name=f"{base_filename}.mrc")
+                        with col2:
+                            with open(marc_txt_path, "r", encoding="utf-8") as f:
+                                st.download_button("Download Text MARC (.txt)", f, file_name=f"{base_filename}.txt")
+                        with col3:
+                            with open(marc_xml_path, "r", encoding="utf-8") as f:
+                                st.download_button("Download MARC XML (.xml)", f, file_name=f"{base_filename}.xml")
 
                 except Exception as e:
                     st.error(f"Error processing image: {str(e)}")
