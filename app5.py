@@ -19,7 +19,7 @@ import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
 import pickle
-import easyocr
+
 from PIL import Image
 
 # --- Directory and Path Configuration ---
