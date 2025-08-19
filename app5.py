@@ -19,7 +19,8 @@ import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
 import pickle
-
+import base64
+from Image import PIL
 # --- Directory and Path Configuration ---
 output_dir = "output"
 XML_DB_DIR = "xml_database"
@@ -94,8 +95,16 @@ def extract_text_from_pdf(pdf_path, max_chars=1500):
         if len(text) >= max_chars:
             break
     return text[:max_chars]
-from pymarc import Record, Field, MARCWriter, TextWriter, XMLWriter
-import datetime, os
+
+
+
+def compress_image(uploaded_image, max_size=(800, 800), quality=50):
+    """Compress image to avoid Groq token limit issues."""
+    img = Image.open(uploaded_image)
+    img.thumbnail(max_size)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 def metadata_to_marc(llm_metadata, output_basename, output_dir="output"):
     os.makedirs(output_dir, exist_ok=True)
@@ -991,23 +1000,52 @@ with tab2:
 
             with st.spinner("Extracting text from image..."):
                 try:
-                    # Convert image → PDF → try text extraction
+                    # Wrap image in a PDF page
                     img_doc = fitz.open()
-                    img_page = img_doc.new_page(width=595, height=842)  # A4
+                    img_page = img_doc.new_page(width=595, height=842)  # A4 size
                     img_rect = fitz.Rect(0, 0, 595, 842)
                     img_page.insert_image(img_rect, filename=temp_image_path)
                     temp_pdf_from_img = os.path.join("temp", f"{base_filename}_from_img.pdf")
                     img_doc.save(temp_pdf_from_img)
                     img_doc.close()
 
-                    # Extract text with PyMuPDF (works only if embedded text exists)
+                    # Try extracting text
                     text = extract_text_from_pdf(temp_pdf_from_img)
 
                     if not text.strip():
-                        st.warning("⚠ No extractable text found in this image. The record may be incomplete.")
+                        st.warning("⚠ No extractable text found. Falling back to Groq image reading...")
+                        img_b64 = compress_image(uploaded_image)
+                        prompt = f"""
+    This is a photo of a bibliographic catalog entry. 
+    Extract the following metadata and return ONLY valid JSON:
+    - title
+    - authors
+    - publisher
+    - publication year
+    - isbn
+    - subjects
+    - call_number
 
-                    st.info("Extracting metadata with AI...")
-                    prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON (no explanation):\n- title\n- authors (full names)\n- publisher\n- publication year\n- language\n- isbn (if present)\n- doi (if present)\n- abstract\n\nText:\n{text}"""
+    Image (base64, compressed):
+    {img_b64}
+    """
+                    else:
+                        st.info("✅ Text extracted, sending to Groq...")
+                        prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON (no explanation):
+    - title
+    - authors
+    - publisher
+    - publication year
+    - language
+    - isbn
+    - doi
+    - abstract
+    - subjects
+    - call_number
+
+    Text:
+    {text}"""
+
                     llm_response = ask_groq_model(prompt, api_key)
                     llm_metadata = extract_json_block(llm_response)
 
@@ -1034,7 +1072,6 @@ with tab2:
 
                 except Exception as e:
                     st.error(f"Error processing image: {str(e)}")
-
 # ─────────────────────────────────────────────
 # 🖼️ Tab 3: Read MARC File
 with tab3:
