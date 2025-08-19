@@ -94,6 +94,71 @@ def extract_text_from_pdf(pdf_path, max_chars=1500):
         if len(text) >= max_chars:
             break
     return text[:max_chars]
+from pymarc import Record, Field, MARCWriter, TextWriter, XMLWriter
+import datetime, os
+
+def metadata_to_marc(llm_metadata, output_basename, output_dir="output"):
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # File paths
+    marc_bin_path = os.path.join(output_dir, f"{output_basename}.mrc")
+    marc_txt_path = os.path.join(output_dir, f"{output_basename}.txt")
+    marc_xml_path = os.path.join(output_dir, f"{output_basename}.xml")
+    
+    # Create MARC record
+    record = Record(force_utf8=True)
+
+    # Control fields
+    record.add_field(Field(tag="001", data=str(hash(output_basename))[:12]))
+    record.add_field(Field(tag="003", data="HybridExtractor"))
+    record.add_field(Field(tag="005", data=datetime.datetime.now().strftime("%Y%m%d%H%M%S.0")))
+
+    # Fixed-length data elements (008)
+    pub_year = llm_metadata.get("publication year", "2024")
+    lang = llm_metadata.get("language", "eng")[:3]
+    field_008 = f"{datetime.datetime.now():%y%m%d}s{pub_year}####xx###########|{lang}#d"
+    record.add_field(Field(tag="008", data=field_008))
+
+    # Title (245)
+    title = llm_metadata.get("title", "Untitled")
+    record.add_field(Field(tag="245", indicators=["1", "0"], subfields=["a", title]))
+
+    # Authors (100 for first, 700 for others)
+    authors = llm_metadata.get("authors", [])
+    if authors:
+        record.add_field(Field(tag="100", indicators=["1", " "], subfields=["a", authors[0]]))
+        for author in authors[1:]:
+            record.add_field(Field(tag="700", indicators=["1", " "], subfields=["a", author]))
+
+    # Publisher + Year (264)
+    publisher = llm_metadata.get("publisher", "")
+    record.add_field(Field(tag="264", indicators=[" ", "1"], subfields=[
+        "a", "xx", 
+        "b", publisher, 
+        "c", pub_year
+    ]))
+
+    # ISBN (020)
+    if "isbn" in llm_metadata and llm_metadata["isbn"]:
+        record.add_field(Field(tag="020", subfields=["a", llm_metadata["isbn"]]))
+
+    # DOI (024)
+    if "doi" in llm_metadata and llm_metadata["doi"]:
+        record.add_field(Field(tag="024", indicators=["7", " "], subfields=["a", llm_metadata["doi"], "2", "doi"]))
+
+    # Abstract (520)
+    if "abstract" in llm_metadata and llm_metadata["abstract"]:
+        record.add_field(Field(tag="520", indicators=[" ", " "], subfields=["a", llm_metadata["abstract"]]))
+
+    # Save MARC in 3 formats
+    with open(marc_bin_path, "wb") as f:
+        MARCWriter(f).write(record)
+    with open(marc_txt_path, "w", encoding="utf-8") as f:
+        TextWriter(f).write(record)
+    with open(marc_xml_path, "wb") as f:
+        XMLWriter(f).write(record)
+
+    return record, marc_bin_path, marc_txt_path, marc_xml_path
 
 def ask_groq_model(prompt, api_key):
     headers = {
@@ -787,88 +852,180 @@ def read_marc_file_cached(file_path):
 
 # ─────────────────────────────────────────────
 # 📄 Tab 2: PDF to MARC
+import base64
 with tab2:
-    st.subheader("📄 PDF to Marc File")
-    st.write("Upload a PDF to generate MARC records")
+    st.subheader("📄 PDF/Image to MARC File")
+    st.write("Upload a PDF or an Image to generate MARC records")
     api_key = st.secrets["groq_api_key"]
-    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
-    current_file_hash = None
-    if uploaded_file:
-        current_file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
-    should_process = (uploaded_file and api_key and (current_file_hash != st.session_state.get('processed_file_hash') or st.session_state.get('processed_file_hash') is None))
-    if should_process:
-        temp_dir = "temp"
-        os.makedirs(temp_dir, exist_ok=True)
-        base_filename = Path(uploaded_file.name).stem
-        temp_pdf = os.path.join(temp_dir, f"{base_filename}.pdf")
-        marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
-        marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
-        marc_xml_path = os.path.join(output_dir, f"{base_filename}.xml")
-        xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
-        with st.spinner("Processing PDF..."):
+
+    file_type = st.radio("Select file type:", ["PDF", "Image"])
+
+    # ============ PDF Workflow ============
+    if file_type == "PDF":
+        uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+        current_file_hash = None
+        if uploaded_file:
+            current_file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
+        should_process = (
+            uploaded_file
+            and api_key
+            and (current_file_hash != st.session_state.get('processed_file_hash')
+                 or st.session_state.get('processed_file_hash') is None)
+        )
+        if should_process:
+            temp_dir = "temp"
+            os.makedirs(temp_dir, exist_ok=True)
+            base_filename = Path(uploaded_file.name).stem
+            temp_pdf = os.path.join(temp_dir, f"{base_filename}.pdf")
+            marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
+            marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
+            marc_xml_path = os.path.join(output_dir, f"{base_filename}.xml")
+            xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
+            with st.spinner("Processing PDF..."):
+                try:
+                    with open(temp_pdf, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    st.info("Sending to GROBID...")
+
+                    # Create a reduced PDF with only the first 40 pages
+                    short_pdf_path = os.path.join(temp_dir, f"{base_filename}_first40.pdf")
+                    doc = fitz.open(temp_pdf)
+                    short_doc = fitz.open()  # empty PDF
+                    for i in range(min(40, len(doc))):
+                        short_doc.insert_pdf(doc, from_page=i, to_page=i)
+                    short_doc.save(short_pdf_path)
+                    short_doc.close()
+                    doc.close()
+
+                    # Send the short version to GROBID
+                    tei = send_pdf_to_grobid_header(short_pdf_path)
+
+                    st.info("Extracting text snippet...")
+                    text = extract_text_from_pdf(temp_pdf)
+                    st.info("Extracting metadata with AI...")
+                    prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON (no explanation):\n- title\n- authors (full names)\n\nText:\n{text}"""
+                    llm_response = ask_groq_model(prompt, api_key)
+                    llm_metadata = extract_json_block(llm_response)
+
+                    st.info("Generating MARC records...")
+                    record, marc_bin_path, marc_txt_path, marc_xml_path = tei_to_marc(
+                        tei, marc_bin_path, temp_pdf, llm_metadata
+                    )
+                    if os.path.exists(marc_xml_path):
+                        shutil.copy2(marc_xml_path, xml_db_path)
+
+                    st.session_state.current_record = record
+                    st.session_state.llm_metadata = llm_metadata
+                    st.session_state.marc_bin_path = marc_bin_path
+                    st.session_state.marc_txt_path = marc_txt_path
+                    st.session_state.marc_xml_path = marc_xml_path
+                    st.session_state.processed_file_hash = current_file_hash
+                    st.session_state.base_filename = base_filename
+                except Exception as e:
+                    st.error(f"Error processing file: {str(e)}")
+                finally:
+                    if os.path.exists(temp_pdf):
+                        try:
+                            os.remove(temp_pdf)
+                        except:
+                            pass
+
+        if st.session_state.get('current_record'):
+            st.success(f"MARC records generated successfully! Saved in {output_dir}/")
+            st.subheader("Extracted Metadata")
+            st.json(st.session_state.llm_metadata)
+            st.subheader("Text MARC Preview")
             try:
-                with open(temp_pdf, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                st.info("Sending to GROBID...")
-                # Create a reduced PDF with only the first 30 pages
-                short_pdf_path = os.path.join(temp_dir, f"{base_filename}_first30.pdf")
-                doc = fitz.open(temp_pdf)
-                short_doc = fitz.open()  # empty PDF
-                for i in range(min(40, len(doc))):
-                    short_doc.insert_pdf(doc, from_page=i, to_page=i)
-                short_doc.save(short_pdf_path)
-                short_doc.close()
-                doc.close()
+                with open(st.session_state.marc_txt_path, "r", encoding="utf-8") as f:
+                    st.code(f.read())
+            except:
+                st.code(str(st.session_state.current_record))
 
-                # Send the short version to GROBID
-                tei = send_pdf_to_grobid_header(short_pdf_path)
+            st.subheader("Download MARC Records")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                with open(st.session_state.marc_bin_path, "rb") as f:
+                    st.download_button("Download MARC (.mrc)", f,
+                        file_name=f"{st.session_state.base_filename}.mrc")
+            with col2:
+                with open(st.session_state.marc_txt_path, "r", encoding="utf-8") as f:
+                    st.download_button("Download Text MARC (.txt)", f,
+                        file_name=f"{st.session_state.base_filename}.txt")
+            with col3:
+                with open(st.session_state.marc_xml_path, "r", encoding="utf-8") as f:
+                    st.download_button("Download MARC XML (.xml)", f,
+                        file_name=f"{st.session_state.base_filename}.xml")
+# ============ Image Workflow ============
+    elif file_type == "Image":
+        uploaded_image = st.file_uploader("Choose an image", type=["png", "jpg", "jpeg"])
+        if uploaded_image:
+            base_filename = Path(uploaded_image.name).stem
+            temp_image_path = os.path.join("temp", f"{base_filename}.png")
+            os.makedirs("temp", exist_ok=True)
 
-                st.info("Extracting text snippet...")
-                text = extract_text_from_pdf(temp_pdf)
-                st.info("Extracting metadata with AI...")
-                prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON (no explanation):\n- title\n- authors (full names)\n\nText:\n{text}"""
-                llm_response = ask_groq_model(prompt, api_key)
-                llm_metadata = extract_json_block(llm_response)
-                st.info("Generating MARC records...")
-                record, marc_bin_path, marc_txt_path, marc_xml_path = tei_to_marc(tei, marc_bin_path, temp_pdf, llm_metadata)
-                if os.path.exists(marc_xml_path):
-                    shutil.copy2(marc_xml_path, xml_db_path)
-                st.session_state.current_record = record
-                st.session_state.llm_metadata = llm_metadata
-                st.session_state.marc_bin_path = marc_bin_path
-                st.session_state.marc_txt_path = marc_txt_path
-                st.session_state.marc_xml_path = marc_xml_path
-                st.session_state.processed_file_hash = current_file_hash
-                st.session_state.base_filename = base_filename
-            except Exception as e:
-                st.error(f"Error processing file: {str(e)}")
-            finally:
-                if os.path.exists(temp_pdf):
-                    try:
-                        os.remove(temp_pdf)
-                    except:
-                        pass
-    if st.session_state.get('current_record'):
-        st.success(f"MARC records generated successfully! Saved in {output_dir}/")
-        st.subheader("Extracted Metadata")
-        st.json(st.session_state.llm_metadata)
-        st.subheader("Text MARC Preview")
-        try:
-            with open(st.session_state.marc_txt_path, "r", encoding="utf-8") as f:
-                st.code(f.read())
-        except:
-            st.code(str(st.session_state.current_record))
-        st.subheader("Download MARC Records")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            with open(st.session_state.marc_bin_path, "rb") as f:
-                st.download_button("Download MARC (.mrc)", f, file_name=f"{st.session_state.base_filename}.mrc")
-        with col2:
-            with open(st.session_state.marc_txt_path, "r", encoding="utf-8") as f:
-                st.download_button("Download Text MARC (.txt)", f, file_name=f"{st.session_state.base_filename}.txt")
-        with col3:
-            with open(st.session_state.marc_xml_path, "r", encoding="utf-8") as f:
-                st.download_button("Download MARC XML (.xml)", f, file_name=f"{st.session_state.base_filename}.xml")
+            with open(temp_image_path, "wb") as f:
+                f.write(uploaded_image.getbuffer())
+
+            with st.spinner("Extracting full bibliographic metadata from image with AI..."):
+                with open(temp_image_path, "rb") as img_file:
+                    img_b64 = base64.b64encode(img_file.read()).decode("utf-8")
+
+                # Prompt to Groq API: ask for complete metadata
+                prompt = f"""
+                You are a librarian assistant. Extract complete bibliographic metadata
+                from the following academic book/journal image. Return ONLY valid JSON
+                with these keys:
+                - title
+                - authors (list of full names)
+                - publisher
+                - publication year
+                - language
+                - isbn (if present)
+                - doi (if present)
+                - abstract (if visible)
+                
+                Image:
+                ![image](data:image/png;base64,{img_b64})
+                """
+
+                try:
+                    llm_response = ask_groq_model(prompt, api_key)
+                    llm_metadata = extract_json_block(llm_response)
+
+                    # Minimal TEI (since we don’t have one for images)
+                    tei = "<TEI></TEI>"
+
+                    # File paths
+                    marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
+                    marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
+                    marc_xml_path = os.path.join(output_dir, f"{base_filename}.xml")
+                    xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
+
+                    st.info("Generating MARC records...")
+                    record, marc_bin_path, marc_txt_path, marc_xml_path = metadata_to_marc(
+                    llm_metadata, base_filename, output_dir
+                    )
+                    if os.path.exists(marc_xml_path):
+                        shutil.copy2(marc_xml_path, xml_db_path)
+
+                    st.success("✅ MARC records generated successfully from image!")
+                    st.subheader("Extracted Metadata")
+                    st.json(llm_metadata)
+
+                    st.subheader("Download MARC Records")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        with open(marc_bin_path, "rb") as f:
+                            st.download_button("Download MARC (.mrc)", f, file_name=f"{base_filename}.mrc")
+                    with col2:
+                        with open(marc_txt_path, "r", encoding="utf-8") as f:
+                            st.download_button("Download Text MARC (.txt)", f, file_name=f"{base_filename}.txt")
+                    with col3:
+                        with open(marc_xml_path, "r", encoding="utf-8") as f:
+                            st.download_button("Download MARC XML (.xml)", f, file_name=f"{base_filename}.xml")
+
+                except Exception as e:
+                    st.error(f"Error processing image: {str(e)}")
 
 # ─────────────────────────────────────────────
 # 🖼️ Tab 3: Read MARC File
