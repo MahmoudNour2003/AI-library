@@ -880,12 +880,21 @@ def read_marc_file_cached(file_path):
 # ─────────────────────────────────────────────
 with tab2:
     st.subheader("📄 PDF / Image to MARC File")
-    st.write("Upload a PDF or an Image (JPG/PNG) to generate MARC records")
-    api_key = st.secrets["groq_api_key"]
-    ocr_api_key = st.secrets.get("ocr_space_api_key", "helloworld")  # add to Streamlit secrets for real use
+    st.write("Choose to upload a PDF (GROBID) or an Image (OCR.Space)")
 
-    uploaded_file = st.file_uploader("Choose a PDF or Image file", type=["pdf", "png", "jpg", "jpeg"])
+    api_key = st.secrets["groq_api_key"]
+    ocr_api_key = st.secrets.get("ocr_space_api_key", "helloworld")  # add in Streamlit secrets
+
+    option = st.radio("Select input type:", ["PDF", "Image"])
+
     current_file_hash = None
+    uploaded_file = None
+
+    if option == "PDF":
+        uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
+    else:
+        uploaded_file = st.file_uploader("Upload an Image file", type=["jpg", "jpeg", "png"])
+
     if uploaded_file:
         current_file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
 
@@ -905,8 +914,8 @@ with tab2:
         xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
 
         try:
-            # Handle PDF
-            if uploaded_file.type == "application/pdf":
+            if option == "PDF":
+                # --- PDF Handling ---
                 temp_pdf = os.path.join(temp_dir, f"{base_filename}.pdf")
                 with open(temp_pdf, "wb") as f:
                     f.write(uploaded_file.getbuffer())
@@ -927,12 +936,13 @@ with tab2:
                 text = extract_text_from_pdf(temp_pdf)
 
             else:
-                # Handle Image with OCR.Space
-                temp_img = os.path.join(temp_dir, uploaded_file.name)
+                # --- Image Handling with OCR.Space ---
+                temp_img = os.path.join(temp_dir, f"{base_filename}.jpg")
                 with open(temp_img, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
                 st.info("Extracting text from image using OCR.Space...")
+
                 def ocr_space(image_path, api_key=ocr_api_key):
                     url = "https://api.ocr.space/parse/image"
                     with open(image_path, "rb") as f:
@@ -949,10 +959,10 @@ with tab2:
 
                 text = ocr_space(temp_img)
 
-                # Fake TEI (minimal) since no GROBID on image
+                # Fake minimal TEI for MARC generator
                 tei = "<tei><teiHeader><fileDesc><titleStmt><title></title></titleStmt></fileDesc></teiHeader></tei>"
 
-            # Send to Groq for metadata
+            # --- Common Groq + MARC ---
             st.info("Extracting metadata with AI...")
             prompt = f"""Extract the following metadata from this bibliographic entry and return ONLY valid JSON (no explanation):
     - title
@@ -965,9 +975,8 @@ with tab2:
     - abstract
     - subjects
     - call_number
-
 Text:
-{text[:4000]}"""  # limit text to avoid Groq 413 errors
+{text[:4000]}"""  # limit size
 
             llm_response = ask_groq_model(prompt, api_key)
             llm_metadata = extract_json_block(llm_response)
@@ -991,6 +1000,7 @@ Text:
         except Exception as e:
             st.error(f"Error processing file: {str(e)}")
 
+    # --- Show Results ---
     if st.session_state.get('current_record'):
         st.success(f"MARC records generated successfully! Saved in {output_dir}/")
         st.subheader("Extracted Metadata")
