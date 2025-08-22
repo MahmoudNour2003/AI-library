@@ -893,7 +893,21 @@ with tab3:
                 reader = MARCReader(buffer, to_unicode=True, force_utf8=True)
                 for i, record in enumerate(reader):
                     with st.expander(f"📄 السجل رقم {i+1}"):
-                        st.code(str(record), language="text")
+                        st.code(str(record), language="text")    # Save MARC record to XML_DB_DIR for Q&A Bot
+                        xml_filename = Path(uploaded_marc.name).stem + ".xml"
+                        xml_path = os.path.join(XML_DB_DIR, xml_filename)
+                        with open(xml_path, "wb") as f:
+                            writer = XMLWriter(f)
+                            writer.write(record)
+                            writer.close()
+
+                        # Clear vector database cache to include new record
+                        if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+                        if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+                        if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+                        st.cache_resource.clear()
+                        st.success(f"Record saved to database for Q&A: {xml_filename}")
+
         except Exception as e:
             st.error("❌ حدث خطأ أثناء قراءة الملف:")
             st.exception(e)
