@@ -306,23 +306,34 @@ def tei_to_marc(tei_xml, marc_path, pdf_path, llm_metadata):
 
 # --- Q&A Bot Helper Functions (New) ---
 def parse_record_for_rag(record, file_path):
-    """Extracts key information from a MARC record for RAG."""
+    """
+    Extracts ALL fields from a MARC record for RAG embeddings.
+    This ensures Q&A bot can answer about pages, publisher, etc.
+    """
+    field_texts = []
+
+    for field in record:
+        if field.is_control_field():
+            field_texts.append(f"{field.tag}: {field.data}")
+        else:
+            subfields = " ".join([f"${sf.code} {sf.value}" for sf in field.subfields])
+            field_texts.append(f"{field.tag} {field.indicator1}{field.indicator2}: {subfields}")
+
+    # Combine into a single text block
+    document_text = "\n".join(field_texts)
+
+    # Metadata for display in sources list
     title = record.title or "[No Title]"
     authors = [f.value() for f in record.get_fields('100', '700')]
-    author_str = ", ".join(authors) if authors else "[No Author]"
-    abstract = record['520'].value() if record['520'] else ""
     control_number = record['001'].value() if record['001'] else "[No ID]"
-    
-    # Document text for embedding
-    document_text = f"Title: {title}\nAuthors: {author_str}\nAbstract: {abstract}"
-    
-    # Metadata for display and referencing the source file
+
     metadata = {
-        'title': title,
-        'authors': authors if authors else ["N/A"],
-        'control_number': control_number,
-        'file_path': file_path.replace(XML_DB_DIR, output_dir).replace('.xml', '.txt')
+        "title": title,
+        "authors": authors if authors else ["N/A"],
+        "control_number": control_number,
+        "file_path": file_path.replace(XML_DB_DIR, output_dir).replace('.xml', '.txt')
     }
+
     return document_text, metadata
 
 @st.cache_resource
