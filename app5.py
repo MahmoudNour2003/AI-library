@@ -1051,7 +1051,7 @@ with tab5:
                 
                 # Prepare prompt for the LLM
                 prompt = f"""
-                You are a librarian assistant answering questions about books in our library.
+                You are a librarian assistant answering questions about books in our library(from marc files).
                 Answer ONLY based on the following context extracted from library records.
                 If you don't know the answer from the context, say "I couldn't find that information in our library."
                 Be concise and accurate.
