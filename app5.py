@@ -712,7 +712,12 @@ with tab1:
             
             # Copy XML to database directory
             shutil.copy2(xml_path, xml_db_path)
-            
+            # Clear vector database cache to include new record
+            if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+            if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+            if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+            st.cache_resource.clear()
+
             st.success(f"✅ تم إنشاء السجل بنجاح وحفظ الملفات في مجلد output!")
             st.success(f"✅ تم حفظ نسخة XML في قاعدة البيانات: {xml_db_path}")
 
@@ -833,6 +838,12 @@ with tab2:
                 record, marc_bin_path, marc_txt_path, marc_xml_path = tei_to_marc(tei, marc_bin_path, temp_pdf, llm_metadata)
                 if os.path.exists(marc_xml_path):
                     shutil.copy2(marc_xml_path, xml_db_path)
+                    # Clear vector database cache to include new record
+                    if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+                    if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+                    if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+                    st.cache_resource.clear()
+
                 st.session_state.current_record = record
                 st.session_state.llm_metadata = llm_metadata
                 st.session_state.marc_bin_path = marc_bin_path
@@ -982,6 +993,14 @@ with tab5:
     if st.button("Ask Question") and api_key and user_question:
         with st.spinner("Searching library and generating answer..."):
             try:
+                # Optional manual rebuild
+                if st.button("Rebuild Database"):
+                    if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+                    if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+                    if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+                    st.cache_resource.clear()
+                    st.success("Database cache cleared. It will rebuild on next query.")
+
                 # Get vector database
                 index, documents, metadata = get_vector_database()
 
