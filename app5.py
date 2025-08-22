@@ -894,30 +894,30 @@ with tab3:
                 for i, record in enumerate(reader):
                     with st.expander(f"📄 السجل رقم {i+1}"):
                         st.code(str(record), language="text")    
-                            # Save MARC record to XML_DB_DIR for Q&A Bot
-                            xml_filename = Path(uploaded_marc.name).stem + ".xml"
-                            xml_path = os.path.join(XML_DB_DIR, xml_filename)
-                            with open(xml_path, "wb") as f:
-                                writer = XMLWriter(f)
-                                writer.write(record)
-                                writer.close()
+                        # Save MARC record to XML_DB_DIR for Q&A Bot
+                        xml_filename = Path(uploaded_marc.name).stem + ".xml"
+                        xml_path = os.path.join(XML_DB_DIR, xml_filename)
+                        with open(xml_path, "wb") as f:
+                            writer = XMLWriter(f)
+                            writer.write(record)
+                            writer.close()
 
-                            # Also save MARC and TXT to output folder so Tab 4 can display it
-                            base_filename = Path(uploaded_marc.name).stem
-                            marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
-                            marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
-                            with open(marc_bin_path, 'wb') as f:
-                                f.write(record.as_marc())
-                            with open(marc_txt_path, 'w', encoding='utf-8') as f:
-                                marc_text = record.as_marc21()
-                                f.write(marc_text.decode('utf-8') if isinstance(marc_text, bytes) else marc_text)
+                        # Also save MARC and TXT to output folder so Tab 4 can display it
+                        base_filename = Path(uploaded_marc.name).stem
+                        marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
+                        marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
+                        with open(marc_bin_path, 'wb') as f:
+                            f.write(record.as_marc())
+                        with open(marc_txt_path, 'w', encoding='utf-8') as f:
+                            marc_text = record.as_marc21()
+                            f.write(marc_text.decode('utf-8') if isinstance(marc_text, bytes) else marc_text)
 
-                            # Clear vector database cache to include new record
-                            if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
-                            if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
-                            if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
-                            st.cache_resource.clear()
-                            st.success(f"Record saved to database for Q&A and added to library: {base_filename}")
+                        # Clear vector database cache to include new record
+                        if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+                        if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+                        if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+                        st.cache_resource.clear()
+                        st.success(f"Record saved to database for Q&A and added to library: {base_filename}")
 
 
         except Exception as e:
