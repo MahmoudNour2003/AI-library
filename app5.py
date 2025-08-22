@@ -994,9 +994,14 @@ with tab4:
                             if os.path.exists(xml_db_path):
                                 os.remove(xml_db_path)
                                 deleted_files.append(xml_db_path)
+
+                            # Clear session state to avoid FileNotFoundError
+                            if "generated_files" in st.session_state:
+                                st.session_state.pop("generated_files")
+
                             if deleted_files:
                                 st.success(f"Successfully deleted {len(deleted_files)} files for {base_name}")
-                                # Clear caches related to the vector DB so it rebuilds
+                                # Clear caches so vector DB rebuilds
                                 if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
                                 if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
                                 if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
@@ -1005,10 +1010,6 @@ with tab4:
                                 st.warning("No files were found to delete")
                         except Exception as e:
                             st.error(f"Error deleting files: {str(e)}")
-                            st.info("Deletion status:")
-                            for path in [txt_path, mrc_path, xml_path, xml_db_path]:
-                                exists = os.path.exists(path)
-                                st.write(f"{'❌' if exists else '✅'} {path}")
     except Exception as e:
         st.error(f"Error accessing records: {str(e)}")
 
