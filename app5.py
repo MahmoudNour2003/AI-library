@@ -894,68 +894,42 @@ with tab2:
 
 # ─────────────────────────────────────────────
 # 🖼️ Tab 3: Read MARC File
-# ─────────────────────────────────────────────
-# 🖼️ Tab 3: Read MARC File (MARC21, MARC-8, UTF-8, MARCXML)
-# ─────────────────────────────────────────────
 with tab3:
-    st.subheader("📂 قراءة MARC موجود (MARC21, UTF-8, MARC-8, MARCXML)")
-    uploaded_marc = st.file_uploader(
-        "⬆️ اختر ملف MARC",
-        type=["mrc", "xml", "marc8", "utf8", "marcstd"]
-    )
-
-    def save_record_to_db(record, filename):
-        """Save record to XML_DB_DIR and output folder, clear cache."""
-        xml_filename = Path(filename).stem + ".xml"
-        xml_path = os.path.join(XML_DB_DIR, xml_filename)
-        with open(xml_path, "wb") as f:
-            writer = XMLWriter(f)
-            writer.write(record)
-            writer.close()
-
-        base_filename = Path(filename).stem
-        marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
-        marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
-        with open(marc_bin_path, 'wb') as f:
-            f.write(record.as_marc())
-        with open(marc_txt_path, 'w', encoding='utf-8') as f:
-            marc_text = record.as_marc21()
-            f.write(marc_text.decode('utf-8') if isinstance(marc_text, bytes) else marc_text)
-
-        # Clear vector database cache to include new record
-        if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
-        if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
-        if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
-        st.cache_resource.clear()
-        st.success(f"Record saved to database for Q&A and added to library: {base_filename}")
-
+    st.subheader("📂 قراءة MARC موجود (.mrc)")
+    uploaded_marc = st.file_uploader("⬆️ اختر ملف MARC (.mrc)", type=["mrc"])
     if uploaded_marc is not None:
         try:
             st.success("✅ تم رفع الملف بنجاح. جاري المعالجة...")
-            file_bytes = uploaded_marc.read()
+            with io.BytesIO(uploaded_marc.read()) as buffer:
+                reader = MARCReader(buffer, to_unicode=True, force_utf8=True)
+                for i, record in enumerate(reader):
+                    with st.expander(f"📄 السجل رقم {i+1}"):
+                        st.code(str(record), language="text")    
+                        # Save MARC record to XML_DB_DIR for Q&A Bot
+                        xml_filename = Path(uploaded_marc.name).stem + ".xml"
+                        xml_path = os.path.join(XML_DB_DIR, xml_filename)
+                        with open(xml_path, "wb") as f:
+                            writer = XMLWriter(f)
+                            writer.write(record)
+                            writer.close()
 
-            # Detect file type
-            if uploaded_marc.name.lower().endswith(".xml"):
-                # Parse MARCXML
-                try:
-                    records = parse_xml_to_array(io.BytesIO(file_bytes))
-                    if not records:
-                        st.error("❌ لا توجد سجلات صالحة في ملف MARCXML.")
-                    else:
-                        for i, record in enumerate(records):
-                            with st.expander(f"📄 السجل رقم {i+1}"):
-                                st.code(str(record), language="text")
-                                save_record_to_db(record, uploaded_marc.name)
-                except Exception as e:
-                    st.error(f"Error reading MARCXML: {e}")
-            else:
-                # Parse MARC21 binary (UTF-8 or MARC-8)
-                with io.BytesIO(file_bytes) as buffer:
-                    reader = MARCReader(buffer, to_unicode=True, force_utf8=True)
-                    for i, record in enumerate(reader):
-                        with st.expander(f"📄 السجل رقم {i+1}"):
-                            st.code(str(record), language="text")
-                            save_record_to_db(record, uploaded_marc.name)
+                        # Also save MARC and TXT to output folder so Tab 4 can display it
+                        base_filename = Path(uploaded_marc.name).stem
+                        marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
+                        marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
+                        with open(marc_bin_path, 'wb') as f:
+                            f.write(record.as_marc())
+                        with open(marc_txt_path, 'w', encoding='utf-8') as f:
+                            marc_text = record.as_marc21()
+                            f.write(marc_text.decode('utf-8') if isinstance(marc_text, bytes) else marc_text)
+
+                        # Clear vector database cache to include new record
+                        if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+                        if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+                        if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+                        st.cache_resource.clear()
+                        st.success(f"Record saved to database for Q&A and added to library: {base_filename}")
+
 
         except Exception as e:
             st.error("❌ حدث خطأ أثناء قراءة الملف:")
