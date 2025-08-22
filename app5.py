@@ -901,7 +901,7 @@ with tab3:
     st.subheader("📂 قراءة MARC موجود (MARC21, UTF-8, MARC-8, MARCXML)")
     uploaded_marc = st.file_uploader(
         "⬆️ اختر ملف MARC",
-        type=["mrc", "xml"]
+        type=["mrc", "xml", "marc8", "utf8", "marcstd"]
     )
 
     def save_record_to_db(record, filename):
