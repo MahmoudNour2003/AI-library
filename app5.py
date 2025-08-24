@@ -464,7 +464,7 @@ def llm_metadata_to_marc(llm_metadata, output_base_path):
     abstract = llm_metadata.get("abstract", "")
     if abstract:
         record.add_field(Field(tag='520', indicators=['#', '#'], subfields=[Subfield('a', abstract)]))
-        
+
     #keywords
     keywords = llm_metadata.get("keywords") or []
     if isinstance(keywords, str):
@@ -472,6 +472,18 @@ def llm_metadata_to_marc(llm_metadata, output_base_path):
     for keyword in keywords:
         if keyword.strip():
             record.add_field(Field(tag='650', indicators=['#', '0'], subfields=[Subfield('a', keyword.strip())]))
+    # --- Subjects ---
+    subjects = llm_metadata.get("subjects") or []
+    if isinstance(subjects, str):
+        subjects = [subjects]
+
+    for subject in subjects:
+        if subject.strip():
+            record.add_field(Field(
+                tag='650',
+                indicators=['#', '0'],
+                subfields=[Subfield('a', subject.strip())]
+            ))
 
     # Publisher & Year
     publisher = llm_metadata.get("publisher", "[Unknown Publisher]")
@@ -1032,26 +1044,28 @@ with tab2:
                     text = extract_text_from_image(temp_image, ocr_api_key)
                     st.info("Extracting metadata with AI...")
                     prompt = f"""
-                    Extract the following metadata from this academic text and return ONLY valid JSON, no explanation:
-                    - title (string)
-                    - subtitle (string, optional)
-                    - authors (list of full names)
-                    - abstract (string, optional)
-                    - keywords (list of strings, optional)
-                    - publication year (string, YYYY format)
-                    - publisher (string)
-                    - doi (string, optional)
-                    - isbn (string, optional)
-                    - language (string, ISO 639-1 or 639-3 code)
-                    - journal title (string, optional)
-                    - volume (string, optional)
-                    - issue (string, optional)
-                    - pages (string, optional)
-                    - additional notes (string, optional)
+    Extract the following metadata from this academic text and return ONLY valid JSON, no explanation:
+    - title (string)
+    - subtitle (string, optional)
+    - authors (list of full names)
+    - abstract (string, optional)
+    - subjects (list of strings, optional)  # MARC 650 field
+    - keywords (list of strings, optional)  # Alternative name for subjects
+    - publication year (string, YYYY format)
+    - publisher (string)
+    - doi (string, optional)
+    - isbn (string, optional)
+    - language (string, ISO 639-1 or 639-3 code)
+    - journal title (string, optional)
+    - volume (string, optional)
+    - issue (string, optional)
+    - pages (string, optional)
+    - additional notes (string, optional)
 
-                    Academic Text:
-                    {text}
-                    """
+    Text:
+    {text}
+"""
+
 
                     llm_response = ask_groq_model(prompt, api_key)
                     llm_metadata = extract_json_block(llm_response)
