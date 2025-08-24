@@ -1114,12 +1114,12 @@ with tab2:
                     except Exception as e:
                         st.error(f"Error processing images: {str(e)}")
 
-                finally:
-                    if os.path.exists(temp_image):
-                        try:
-                            os.remove(temp_image)
-                        except:
-                            pass
+                    finally:
+                        if os.path.exists(temp_image):
+                            try:
+                                os.remove(temp_image)
+                            except:
+                                pass
 
     if st.session_state.get('current_record'):
         st.success(f"MARC records generated successfully! Saved in {output_dir}/")
