@@ -434,9 +434,17 @@ def llm_metadata_to_marc(llm_metadata, output_base_path):
     main_title, subtitle_split = (title.split(':', 1) + [''])[:2]
     subtitle = subtitle or subtitle_split
 
-    authors = llm_metadata.get("authors", [])
+    # Authors
+    authors = llm_metadata.get("authors") or []
     if isinstance(authors, str):
         authors = [authors]
+
+    for i, author in enumerate(authors):
+        tag = '100' if i == 0 else '700'
+        record.add_field(Field(tag=tag, indicators=['1', '#'], subfields=[
+            Subfield('a', author),
+            Subfield('e', 'author.')
+        ]))
 
     record.add_field(Field(tag='245', indicators=['1', '0'], subfields=[
         Subfield('a', main_title.strip() + (' :' if subtitle else '')),
@@ -456,9 +464,9 @@ def llm_metadata_to_marc(llm_metadata, output_base_path):
     abstract = llm_metadata.get("abstract", "")
     if abstract:
         record.add_field(Field(tag='520', indicators=['#', '#'], subfields=[Subfield('a', abstract)]))
-
-    # Keywords
-    keywords = llm_metadata.get("keywords", [])
+        
+    #keywords
+    keywords = llm_metadata.get("keywords") or []
     if isinstance(keywords, str):
         keywords = [keywords]
     for keyword in keywords:
