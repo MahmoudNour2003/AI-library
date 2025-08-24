@@ -1204,11 +1204,22 @@ with tab4:
 
                             if deleted_files:
                                 st.success(f"Successfully deleted {len(deleted_files)} files for {base_name}")
+
+                                # Clear session state to avoid referencing deleted files
+                                for key in [
+                                    "marc_bin_path", "marc_txt_path", "marc_xml_path",
+                                    "current_record", "llm_metadata", "base_filename"
+                                ]:
+                                    if key in st.session_state:
+                                        st.session_state.pop(key)
+
                                 # Clear caches so vector DB rebuilds
                                 if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
                                 if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
                                 if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+
                                 st.rerun()
+
                             else:
                                 st.warning("No files were found to delete")
                         except Exception as e:
