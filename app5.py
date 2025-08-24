@@ -390,6 +390,22 @@ def get_vector_database():
 
     return index, documents, metadata
 
+def extract_text_from_image(image_path, api_key):
+    """
+    Extracts text from an image using OCR.Space API.
+    """
+    url = "https://api.ocr.space/parse/image"
+    with open(image_path, 'rb') as f:
+        r = requests.post(
+            url,
+            files={"file": f},
+            data={"apikey": api_key, "language": "eng"},
+            timeout=60
+        )
+    result = r.json()
+    if result.get("IsErroredOnProcessing"):
+        raise Exception(result.get("ErrorMessage", "OCR failed"))
+    return result["ParsedResults"][0]["ParsedText"]
 
 # ─────────────────────────────────────────────
 #           STREAMLIT UI
@@ -802,74 +818,140 @@ def read_marc_file_cached(file_path):
         return f"Error reading MARC file: {str(e)}"
 
 # ─────────────────────────────────────────────
-# 📄 Tab 2: PDF to MARC
+# 📄 Tab 2: PDF / Image to MARC
 with tab2:
-    st.subheader("📄 PDF to Marc File")
-    st.write("Upload a PDF to generate MARC records")
+    st.subheader("📄 PDF / Image to MARC File")
+    st.write("Upload a PDF (via GROBID) or an Image (via OCR.Space)")
+
     api_key = st.secrets["groq_api_key"]
-    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+    ocr_api_key = st.secrets.get("ocr_space_api_key", "helloworld")
+
+    option = st.radio("Select input type:", ["PDF", "Image"])
+
+    uploaded_file = st.file_uploader(
+        "Choose a file", 
+        type=["pdf"] if option == "PDF" else ["png", "jpg", "jpeg"]
+    )
     current_file_hash = None
     if uploaded_file:
         current_file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
-    should_process = (uploaded_file and api_key and (current_file_hash != st.session_state.get('processed_file_hash') or st.session_state.get('processed_file_hash') is None))
+
+    should_process = (
+        uploaded_file and api_key and
+        (current_file_hash != st.session_state.get('processed_file_hash') or 
+         st.session_state.get('processed_file_hash') is None)
+    )
+
     if should_process:
         temp_dir = "temp"
         os.makedirs(temp_dir, exist_ok=True)
         base_filename = Path(uploaded_file.name).stem
-        temp_pdf = os.path.join(temp_dir, f"{base_filename}.pdf")
+
         marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
         marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
         marc_xml_path = os.path.join(output_dir, f"{base_filename}.xml")
         xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
-        with st.spinner("Processing PDF..."):
-            try:
-                with open(temp_pdf, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                st.info("Sending to GROBID...")
-                # Create a reduced PDF with only the first 30 pages
-                short_pdf_path = os.path.join(temp_dir, f"{base_filename}_first30.pdf")
-                doc = fitz.open(temp_pdf)
-                short_doc = fitz.open()  # empty PDF
-                for i in range(min(40, len(doc))):
-                    short_doc.insert_pdf(doc, from_page=i, to_page=i)
-                short_doc.save(short_pdf_path)
-                short_doc.close()
-                doc.close()
 
-                # Send the short version to GROBID
-                tei = send_pdf_to_grobid_header(short_pdf_path)
+        if option == "PDF":
+            temp_pdf = os.path.join(temp_dir, f"{base_filename}.pdf")
+            with st.spinner("Processing PDF..."):
+                try:
+                    with open(temp_pdf, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    st.info("Sending to GROBID...")
+                    # Limit pages
+                    short_pdf_path = os.path.join(temp_dir, f"{base_filename}_first40.pdf")
+                    doc = fitz.open(temp_pdf)
+                    short_doc = fitz.open()
+                    for i in range(min(40, len(doc))):
+                        short_doc.insert_pdf(doc, from_page=i, to_page=i)
+                    short_doc.save(short_pdf_path)
+                    short_doc.close()
+                    doc.close()
 
-                st.info("Extracting text snippet...")
-                text = extract_text_from_pdf(temp_pdf)
-                st.info("Extracting metadata with AI...")
-                prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON (no explanation):\n- title\n- authors (full names)\n\nText:\n{text}"""
-                llm_response = ask_groq_model(prompt, api_key)
-                llm_metadata = extract_json_block(llm_response)
-                st.info("Generating MARC records...")
-                record, marc_bin_path, marc_txt_path, marc_xml_path = tei_to_marc(tei, marc_bin_path, temp_pdf, llm_metadata)
-                if os.path.exists(marc_xml_path):
-                    shutil.copy2(marc_xml_path, xml_db_path)
-                    # Clear vector database cache to include new record
-                    if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
-                    if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
-                    if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
-                    st.cache_resource.clear()
+                    tei = send_pdf_to_grobid_header(short_pdf_path)
 
-                st.session_state.current_record = record
-                st.session_state.llm_metadata = llm_metadata
-                st.session_state.marc_bin_path = marc_bin_path
-                st.session_state.marc_txt_path = marc_txt_path
-                st.session_state.marc_xml_path = marc_xml_path
-                st.session_state.processed_file_hash = current_file_hash
-                st.session_state.base_filename = base_filename
-            except Exception as e:
-                st.error(f"Error processing file: {str(e)}")
-            finally:
-                if os.path.exists(temp_pdf):
-                    try:
-                        os.remove(temp_pdf)
-                    except:
-                        pass
+                    st.info("Extracting text snippet...")
+                    text = extract_text_from_pdf(temp_pdf)
+                    st.info("Extracting metadata with AI...")
+                    prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON:
+                    - title
+                    - authors (full names)
+
+                    Text:
+                    {text}
+                    """
+                    llm_response = ask_groq_model(prompt, api_key)
+                    llm_metadata = extract_json_block(llm_response)
+                    st.info("Generating MARC records...")
+                    record, marc_bin_path, marc_txt_path, marc_xml_path = tei_to_marc(tei, marc_bin_path, temp_pdf, llm_metadata)
+                    if os.path.exists(marc_xml_path):
+                        shutil.copy2(marc_xml_path, xml_db_path)
+                        if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+                        if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+                        if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+                        st.cache_resource.clear()
+
+                    st.session_state.current_record = record
+                    st.session_state.llm_metadata = llm_metadata
+                    st.session_state.marc_bin_path = marc_bin_path
+                    st.session_state.marc_txt_path = marc_txt_path
+                    st.session_state.marc_xml_path = marc_xml_path
+                    st.session_state.processed_file_hash = current_file_hash
+                    st.session_state.base_filename = base_filename
+                except Exception as e:
+                    st.error(f"Error processing file: {str(e)}")
+                finally:
+                    if os.path.exists(temp_pdf):
+                        try:
+                            os.remove(temp_pdf)
+                        except:
+                            pass
+
+        elif option == "Image":
+            temp_image = os.path.join(temp_dir, f"{base_filename}.png")
+            with st.spinner("Processing Image..."):
+                try:
+                    with open(temp_image, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    st.info("Extracting text via OCR.Space API...")
+                    text = extract_text_from_image(temp_image, ocr_api_key)
+                    st.info("Extracting metadata with AI...")
+                    prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON:
+                    - title
+                    - authors (full names)
+
+                    Text:
+                    {text}
+                    """
+                    llm_response = ask_groq_model(prompt, api_key)
+                    llm_metadata = extract_json_block(llm_response)
+                    # Minimal TEI for compatibility
+                    fake_tei = "<TEI><teiHeader></teiHeader></TEI>"
+                    record, marc_bin_path, marc_txt_path, marc_xml_path = tei_to_marc(fake_tei, marc_bin_path, temp_image, llm_metadata)
+                    if os.path.exists(marc_xml_path):
+                        shutil.copy2(marc_xml_path, xml_db_path)
+                        if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+                        if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+                        if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+                        st.cache_resource.clear()
+
+                    st.session_state.current_record = record
+                    st.session_state.llm_metadata = llm_metadata
+                    st.session_state.marc_bin_path = marc_bin_path
+                    st.session_state.marc_txt_path = marc_txt_path
+                    st.session_state.marc_xml_path = marc_xml_path
+                    st.session_state.processed_file_hash = current_file_hash
+                    st.session_state.base_filename = base_filename
+                except Exception as e:
+                    st.error(f"Error processing image: {str(e)}")
+                finally:
+                    if os.path.exists(temp_image):
+                        try:
+                            os.remove(temp_image)
+                        except:
+                            pass
+
     if st.session_state.get('current_record'):
         st.success(f"MARC records generated successfully! Saved in {output_dir}/")
         st.subheader("Extracted Metadata")
