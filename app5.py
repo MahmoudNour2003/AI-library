@@ -406,6 +406,112 @@ def extract_text_from_image(image_path, api_key):
     if result.get("IsErroredOnProcessing"):
         raise Exception(result.get("ErrorMessage", "OCR failed"))
     return result["ParsedResults"][0]["ParsedText"]
+def llm_metadata_to_marc(llm_metadata, output_base_path):
+    """
+    Builds a MARC record directly from LLM-extracted metadata (JSON).
+    Does NOT require TEI parsing.
+    """
+    record = Record(force_utf8=True)
+    record.leader = "     nam a22     uu 4500"
+
+    # Control fields
+    record.add_field(Field(tag='001', data=generate_control_number()))
+    record.add_field(Field(tag='003', data='LLMExtractor'))
+    record.add_field(Field(tag='005', data=datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S.0')))
+
+    # Publication year
+    pub_year = llm_metadata.get("publication year", "2024")
+
+    # Language
+    lang_code = llm_metadata.get("language", "en")
+    lang_code = lang_code[:3].lower().ljust(3, '#')
+    record.add_field(Field(tag='008', data=generate_008_field(pub_year, lang_code)))
+    record.add_field(Field(tag='041', indicators=['0', '#'], subfields=[Subfield('a', lang_code)]))
+
+    # Title and subtitle
+    title = llm_metadata.get("title", "[Title not available]")
+    subtitle = llm_metadata.get("subtitle", "")
+    main_title, subtitle_split = (title.split(':', 1) + [''])[:2]
+    subtitle = subtitle or subtitle_split
+
+    authors = llm_metadata.get("authors", [])
+    if isinstance(authors, str):
+        authors = [authors]
+
+    record.add_field(Field(tag='245', indicators=['1', '0'], subfields=[
+        Subfield('a', main_title.strip() + (' :' if subtitle else '')),
+        Subfield('b', subtitle.strip()),
+        Subfield('c', format_authors(authors) + '.')
+    ]))
+
+    # Authors fields
+    for i, author in enumerate(authors):
+        tag = '100' if i == 0 else '700'
+        record.add_field(Field(tag=tag, indicators=['1', '#'], subfields=[
+            Subfield('a', author),
+            Subfield('e', 'author.')
+        ]))
+
+    # Abstract
+    abstract = llm_metadata.get("abstract", "")
+    if abstract:
+        record.add_field(Field(tag='520', indicators=['#', '#'], subfields=[Subfield('a', abstract)]))
+
+    # Keywords
+    keywords = llm_metadata.get("keywords", [])
+    if isinstance(keywords, str):
+        keywords = [keywords]
+    for keyword in keywords:
+        if keyword.strip():
+            record.add_field(Field(tag='650', indicators=['#', '0'], subfields=[Subfield('a', keyword.strip())]))
+
+    # Publisher & Year
+    publisher = llm_metadata.get("publisher", "[Unknown Publisher]")
+    record.add_field(Field(tag='264', indicators=['#', '1'], subfields=[
+        Subfield('a', '[Place of publication not identified]'),
+        Subfield('b', publisher),
+        Subfield('c', pub_year)
+    ]))
+
+    # Identifiers
+    doi = llm_metadata.get("doi")
+    if doi:
+        record.add_field(Field(tag='024', indicators=['7', '#'], subfields=[
+            Subfield('a', doi),
+            Subfield('2', 'doi')
+        ]))
+    isbn = llm_metadata.get("isbn")
+    if isbn:
+        record.add_field(Field(tag='020', indicators=['#', '#'], subfields=[Subfield('a', isbn)]))
+
+    # Journal info
+    journal_title = llm_metadata.get("journal title")
+    volume = llm_metadata.get("volume")
+    issue = llm_metadata.get("issue")
+    pages = llm_metadata.get("pages")
+
+    if journal_title:
+        subfields = [Subfield('t', journal_title)]
+        if volume: subfields.append(Subfield('g', f"Vol. {volume}"))
+        if issue: subfields.append(Subfield('g', f"No. {issue}"))
+        if pages: subfields.append(Subfield('g', f"pp. {pages}"))
+        record.add_field(Field(tag='773', indicators=['0', ' '], subfields=subfields))
+
+    # Save to files
+    marc_path = output_base_path + '.mrc'
+    txt_path = output_base_path + '.txt'
+    marcxml_path = output_base_path + '.xml'
+
+    with open(marc_path, 'wb') as f:
+        f.write(record.as_marc())
+    with open(txt_path, 'w', encoding='utf-8') as f:
+        f.write(str(record))
+    with open(marcxml_path, 'wb') as f:
+        writer = XMLWriter(f)
+        writer.write(record)
+        writer.close()
+
+    return record, marc_path, txt_path, marcxml_path
 
 # ─────────────────────────────────────────────
 #           STREAMLIT UI
@@ -942,8 +1048,8 @@ with tab2:
                     llm_response = ask_groq_model(prompt, api_key)
                     llm_metadata = extract_json_block(llm_response)
                     # Minimal TEI for compatibility
-                    fake_tei = "<TEI><teiHeader></teiHeader></TEI>"
-                    record, marc_bin_path, marc_txt_path, marc_xml_path = tei_to_marc(fake_tei, marc_bin_path, temp_image, llm_metadata)
+                    record, marc_bin_path, marc_txt_path, marc_xml_path = llm_metadata_to_marc(llm_metadata, os.path.join(output_dir, base_filename))
+
                     if os.path.exists(marc_xml_path):
                         shutil.copy2(marc_xml_path, xml_db_path)
                         if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
