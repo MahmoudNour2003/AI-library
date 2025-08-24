@@ -390,22 +390,20 @@ def get_vector_database():
 
     return index, documents, metadata
 
-def extract_text_from_image(image_path, api_key):
-    """
-    Extracts text from an image using OCR.Space API.
-    """
+def extract_text_from_image(image_path, api_key, lang="eng"):
     url = "https://api.ocr.space/parse/image"
     with open(image_path, 'rb') as f:
         r = requests.post(
             url,
             files={"file": f},
-            data={"apikey": api_key, "language": "ara+eng"},
+            data={"apikey": api_key, "language": lang},
             timeout=60
         )
     result = r.json()
     if result.get("IsErroredOnProcessing"):
         raise Exception(result.get("ErrorMessage", "OCR failed"))
     return result["ParsedResults"][0]["ParsedText"]
+
 def llm_metadata_to_marc(llm_metadata, output_base_path):
     """
     Builds a MARC record directly from LLM-extracted metadata (JSON).
@@ -1035,59 +1033,87 @@ with tab2:
                             pass
 
         elif option == "Image":
-            temp_image = os.path.join(temp_dir, f"{base_filename}.png")
-            with st.spinner("Processing Image..."):
-                try:
-                    with open(temp_image, "wb") as f:
-                        f.write(uploaded_file.getbuffer())
-                    st.info("Extracting text via OCR.Space API...")
-                    text = extract_text_from_image(temp_image, ocr_api_key)
-                    st.info("Extracting metadata with AI...")
-                    prompt = f"""
-    Extract the following metadata from this academic text and return ONLY valid JSON, no explanation:
-    - title (string)
-    - subtitle (string, optional)
-    - authors (list of full names)
-    - abstract (string, optional)
-    - subjects (list of strings, optional)  # MARC 650 field
-    - keywords (list of strings, optional)  # Alternative name for subjects
-    - publication year (string, YYYY format)
-    - publisher (string)
-    - doi (string, optional)
-    - isbn (string, optional)
-    - language (string, ISO 639-1 or 639-3 code)
-    - journal title (string, optional)
-    - volume (string, optional)
-    - issue (string, optional)
-    - pages (string, optional)
-    - additional notes (string, optional)
+            uploaded_files = st.file_uploader(
+                "Choose image files",
+                type=["png", "jpg", "jpeg"],
+                accept_multiple_files=True
+            )
 
-    Text:
-    {text}
-"""
+            # OCR language selector
+            ocr_lang = st.selectbox("Select OCR language", ["eng", "ara", "ara+eng", "fra"], index=0)
 
+            if uploaded_files:
+                with st.spinner("Processing Images..."):
+                    try:
+                        temp_dir = "temp"
+                        os.makedirs(temp_dir, exist_ok=True)
 
-                    llm_response = ask_groq_model(prompt, api_key)
-                    llm_metadata = extract_json_block(llm_response)
-                    # Minimal TEI for compatibility
-                    record, marc_bin_path, marc_txt_path, marc_xml_path = llm_metadata_to_marc(llm_metadata, os.path.join(output_dir, base_filename))
+                        # Merge text from all images
+                        all_texts = []
+                        for file in uploaded_files:
+                            temp_image = os.path.join(temp_dir, file.name)
+                            with open(temp_image, "wb") as f:
+                                f.write(file.getbuffer())
+                            extracted_text = extract_text_from_image(temp_image, ocr_api_key, lang=ocr_lang)
+                            all_texts.append(extracted_text)
+                            os.remove(temp_image)
 
-                    if os.path.exists(marc_xml_path):
-                        shutil.copy2(marc_xml_path, xml_db_path)
-                        if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
-                        if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
-                        if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
-                        st.cache_resource.clear()
+                        text = "\n".join(all_texts)
 
-                    st.session_state.current_record = record
-                    st.session_state.llm_metadata = llm_metadata
-                    st.session_state.marc_bin_path = marc_bin_path
-                    st.session_state.marc_txt_path = marc_txt_path
-                    st.session_state.marc_xml_path = marc_xml_path
-                    st.session_state.processed_file_hash = current_file_hash
-                    st.session_state.base_filename = base_filename
-                except Exception as e:
-                    st.error(f"Error processing image: {str(e)}")
+                        # Ask LLM for metadata
+                        st.info("Extracting metadata with AI...")
+                        prompt = f"""
+                        Extract the following metadata from this academic text and return ONLY valid JSON, no explanation:
+                        - title (string)
+                        - subtitle (string, optional)
+                        - authors (list of full names)
+                        - abstract (string, optional)
+                        - subjects (list of strings, optional)
+                        - keywords (list of strings, optional)
+                        - publication year (string, YYYY format)
+                        - publisher (string)
+                        - doi (string, optional)
+                        - isbn (string, optional)
+                        - language (string, ISO 639-1 or 639-3 code)
+                        - journal title (string, optional)
+                        - volume (string, optional)
+                        - issue (string, optional)
+                        - pages (string, optional)
+                        - additional notes (string, optional)
+
+                        Text:
+                        {text}
+                        """
+                        llm_response = ask_groq_model(prompt, api_key)
+                        llm_metadata = extract_json_block(llm_response)
+
+                        # Generate MARC from metadata only
+                        base_filename = "merged_images_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                        output_base_path = os.path.join(output_dir, base_filename)
+
+                        record, marc_bin_path, marc_txt_path, marc_xml_path = llm_metadata_to_marc(llm_metadata, output_base_path)
+
+                        # Save XML to database
+                        xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
+                        if os.path.exists(marc_xml_path):
+                            shutil.copy2(marc_xml_path, xml_db_path)
+                            if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+                            if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+                            if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+                            st.cache_resource.clear()
+
+                        # Update session state
+                        st.session_state.current_record = record
+                        st.session_state.llm_metadata = llm_metadata
+                        st.session_state.marc_bin_path = marc_bin_path
+                        st.session_state.marc_txt_path = marc_txt_path
+                        st.session_state.marc_xml_path = marc_xml_path
+                        st.session_state.processed_file_hash = hashlib.md5("".join([f.name for f in uploaded_files]).encode()).hexdigest()
+                        st.session_state.base_filename = base_filename
+
+                    except Exception as e:
+                        st.error(f"Error processing images: {str(e)}")
+
                 finally:
                     if os.path.exists(temp_image):
                         try:
