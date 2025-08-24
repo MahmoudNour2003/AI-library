@@ -917,13 +917,28 @@ with tab2:
                     st.info("Extracting text via OCR.Space API...")
                     text = extract_text_from_image(temp_image, ocr_api_key)
                     st.info("Extracting metadata with AI...")
-                    prompt = f"""Extract the following metadata from this academic text and return ONLY valid JSON:
-                    - title
-                    - authors (full names)
+                    prompt = f"""
+                    Extract the following metadata from this academic text and return ONLY valid JSON, no explanation:
+                    - title (string)
+                    - subtitle (string, optional)
+                    - authors (list of full names)
+                    - abstract (string, optional)
+                    - keywords (list of strings, optional)
+                    - publication year (string, YYYY format)
+                    - publisher (string)
+                    - doi (string, optional)
+                    - isbn (string, optional)
+                    - language (string, ISO 639-1 or 639-3 code)
+                    - journal title (string, optional)
+                    - volume (string, optional)
+                    - issue (string, optional)
+                    - pages (string, optional)
+                    - additional notes (string, optional)
 
-                    Text:
+                    Academic Text:
                     {text}
                     """
+
                     llm_response = ask_groq_model(prompt, api_key)
                     llm_metadata = extract_json_block(llm_response)
                     # Minimal TEI for compatibility
