@@ -516,7 +516,7 @@ def llm_metadata_to_marc(llm_metadata, output_base_path):
         if issue: subfields.append(Subfield('g', f"No. {issue}"))
         if pages: subfields.append(Subfield('g', f"pp. {pages}"))
         record.add_field(Field(tag='773', indicators=['0', ' '], subfields=subfields))
-
+    record.fields = sorted(record.fields, key=lambda f: int(f.tag) if f.tag.isdigit() else float('inf'))
     # Save to files
     marc_path = output_base_path + '.mrc'
     txt_path = output_base_path + '.txt'
