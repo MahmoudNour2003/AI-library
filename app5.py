@@ -552,278 +552,344 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_titles)
 # ─────────────────────────────────────────────
 # 📋 Tab 1: Manual MARC Entry
 with tab1:
-    st.subheader("✍️ إدخال البيانات يدويًا (كتب أو رسائل جامعية)")
+    st.subheader("✍ إدخال بيانات MARC يدويًا - حقول التحكم")
+    
+    # Initialize session state for control fields
+    if "control_fields" not in st.session_state:
+        st.session_state.control_fields = {
+            "000": "00000nam a2200000 u 4500",
+            "001": "",
+            "003": "MARC-AI",
+            "005": datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S.0'),
+            "008": {
+                "entry_date": datetime.datetime.today().strftime("%y%m%d"),
+                "pub_status": "s",
+                "date1": "2024",
+                "date2": "####",
+                "place": "xx#",
+                "illustrations": "####",
+                "target_audience": "#",
+                "form_of_item": "s",
+                "nature_of_contents": "####",
+                "govt_pub": "#",
+                "conference": "0",
+                "festschrift": "0",
+                "index": "0",
+                "literary_form": "0",
+                "biography": "#",
+                "language": "ara",
+                "modified_record": "#",
+                "cataloging_source": "d"
+            }
+        }
+    
+    # حقول التحكم الأساسية
+    st.markdown("### 🎛 حقول التحكم (Control Fields)")
+    
+    # حقل 000 - الليدير
+    st.session_state.control_fields["000"] = st.text_input(
+        "000 - الليدير (Leader)",
+        value=st.session_state.control_fields["000"],
+        help="24 حرفًا تمثل وصفًا هيكليًا للتسجيلة"
+    )
+    
+    # حقل 001 - رقم التحكم
+    st.session_state.control_fields["001"] = st.text_input(
+        "001 - رقم التحكم (Control Number)",
+        value=st.session_state.control_fields["001"] or generate_control_number(),
+        help="معرف فريد للتسجيلة في النظام"
+    )
+    
+    # حقل 003 - معرّف النظام
+    st.session_state.control_fields["003"] = st.text_input(
+        "003 - معرّف النظام (System Identifier)",
+        value=st.session_state.control_fields["003"],
+        help="رمز أو اسم النظام الذي أنشأ رقم التحكم"
+    )
+    
+    # حقل 005 - تاريخ ووقت آخر تعديل
+    st.session_state.control_fields["005"] = st.text_input(
+        "005 - تاريخ ووقت آخر تعديل (Last Modification)",
+        value=st.session_state.control_fields["005"],
+        help="صيغة YYYYMMDDHHMMSS.0"
+    )
+    
+    # حقل 008 - حقل البيانات الثابتة (مفصل)
+    st.markdown("### 📊 حقل 008 - البيانات الثابتة (مفصل)")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.session_state.control_fields["008"]["entry_date"] = st.text_input(
+            "008/00-05 - تاريخ الإدخال",
+            value=st.session_state.control_fields["008"]["entry_date"],
+            max_chars=6,
+            help="YYMMDD"
+        )
+        
+        st.session_state.control_fields["008"]["pub_status"] = st.selectbox(
+            "008/06 - حالة النشر",
+            options=["s", "c", "n", "d", "e", "f", "g", "k", "m", "p", "q", "r", "t", "u"],
+            index=0,
+            help="s: تاريخ واحد, c: تواريخ متعددة, n: تاريخ غير معروف"
+        )
+        
+        st.session_state.control_fields["008"]["date1"] = st.text_input(
+            "008/07-10 - التاريخ 1",
+            value=st.session_state.control_fields["008"]["date1"],
+            max_chars=4,
+            help="سنة النشر الأولى"
+        )
+        
+        st.session_state.control_fields["008"]["date2"] = st.text_input(
+            "008/11-14 - التاريخ 2",
+            value=st.session_state.control_fields["008"]["date2"],
+            max_chars=4,
+            help="سنة النشر الأخيرة أو ####"
+        )
+        
+        st.session_state.control_fields["008"]["place"] = st.text_input(
+            "008/15-17 - مكان النشر",
+            value=st.session_state.control_fields["008"]["place"],
+            max_chars=3,
+            help="رمز مكان النشر (3 أحرف)"
+        )
+    
+    with col2:
+        st.session_state.control_fields["008"]["illustrations"] = st.text_input(
+            "008/18-21 - الرسوم الإيضاحية",
+            value=st.session_state.control_fields["008"]["illustrations"],
+            max_chars=4,
+            help="أكواد الرسوم (a, b, c, d, e, f, g, h, j, k)"
+        )
+        
+        st.session_state.control_fields["008"]["target_audience"] = st.selectbox(
+            "008/22 - الجمهور المستهدف",
+            options=[" ", "a", "b", "c", "d", "e", "f", "g", "j", "k"],
+            index=0,
+            help="#: غير محدد, a: قبل المدرسة, b: ابتدائي, إلخ"
+        )
+        
+        st.session_state.control_fields["008"]["form_of_item"] = st.selectbox(
+            "008/23 - شكل المادة",
+            options=[" ", "a", "b", "c", "d", "f", "o", "q", "r", "s"],
+            index=9,  # s is the 10th item (0-indexed)
+            help="#: غير محدد, s: إلكتروني, إلخ"
+        )
+        
+        st.session_state.control_fields["008"]["nature_of_contents"] = st.text_input(
+            "008/24-27 - طبيعة المحتوى",
+            value=st.session_state.control_fields["008"]["nature_of_contents"],
+            max_chars=4,
+            help="أكواد المحتوى (a, b, c, d, e, f, m)"
+        )
+    
+    with col3:
+        st.session_state.control_fields["008"]["govt_pub"] = st.selectbox(
+            "008/28 - النشر الحكومي",
+            options=[" ", "a", "c", "f", "i", "l", "m", "o", "s", "u", "z"],
+            index=0,
+            help="#: غير حكومي, a: اتحادي/وطني, إلخ"
+        )
+        
+        st.session_state.control_fields["008"]["conference"] = st.selectbox(
+            "008/29 - مؤتمر",
+            options=["0", "1"],
+            index=0,
+            help="0: ليس منشور مؤتمر, 1: منشور مؤتمر"
+        )
+        
+        st.session_state.control_fields["008"]["festschrift"] = st.selectbox(
+            "008/30 - إهداء",
+            options=["0", "1"],
+            index=0,
+            help="0: ليس إهداء, 1: إهداء"
+        )
+        
+        st.session_state.control_fields["008"]["index"] = st.selectbox(
+            "008/31 - فهارس",
+            options=["0", "1"],
+            index=0,
+            help="0: بدون فهارس, 1: به فهارس"
+        )
+        
+        st.session_state.control_fields["008"]["literary_form"] = st.selectbox(
+            "008/32 - شكل أدبي",
+            options=["0", "1", "c", "d", "e", "f", "h", "i", "j", "m", "p", "s", "u"],
+            index=0,
+            help="0: غير خيالي, 1: خيالي, إلخ"
+        )
+        
+        st.session_state.control_fields["008"]["biography"] = st.selectbox(
+            "008/33 - سيرة ذاتية",
+            options=[" ", "a", "b", "c", "d"],
+            index=0,
+            help="#: لا تحتوي, a: سيرة ذاتية, إلخ"
+        )
+        
+        st.session_state.control_fields["008"]["language"] = st.selectbox(
+            "008/35-37 - اللغة",
+            options=["ara", "eng", "fre", "spa", "ger"],
+            index=0,
+            help="رمز اللغة المكون من 3 أحرف"
+        )
+        
+        st.session_state.control_fields["008"]["modified_record"] = st.selectbox(
+            "008/38 - تسجيلة معدلة",
+            options=[" ", "d", "o", "s"],
+            index=0,
+            help="#: غير معدلة, d: محذوف, إلخ"
+        )
+        
+        st.session_state.control_fields["008"]["cataloging_source"] = st.selectbox(
+            "008/39 - مصدر الفهرسة",
+            options=[" ", "a", "c", "d", "u"],
+            index=4,  # d is the 5th item (0-indexed)
+            help="d: مكتبة أخرى, u: غير معروف"
+        )
+    
+    # معاينة حقل 008
+    st.markdown("### 👀 معاينة حقل 008")
+    eight_field = (
+        f"{st.session_state.control_fields['008']['entry_date']}"
+        f"{st.session_state.control_fields['008']['pub_status']}"
+        f"{st.session_state.control_fields['008']['date1']}"
+        f"{st.session_state.control_fields['008']['date2']}"
+        f"{st.session_state.control_fields['008']['place']}"
+        f"{st.session_state.control_fields['008']['illustrations']}"
+        f"{st.session_state.control_fields['008']['target_audience']}"
+        f"{st.session_state.control_fields['008']['form_of_item']}"
+        f"{st.session_state.control_fields['008']['nature_of_contents']}"
+        f"{st.session_state.control_fields['008']['govt_pub']}"
+        f"{st.session_state.control_fields['008']['conference']}"
+        f"{st.session_state.control_fields['008']['festschrift']}"
+        f"{st.session_state.control_fields['008']['index']}"
+        f"{st.session_state.control_fields['008']['literary_form']}"
+        f"{st.session_state.control_fields['008']['biography']}"
+        f"#{st.session_state.control_fields['008']['language']}#"  # Position 34 is blank
+        f"{st.session_state.control_fields['008']['modified_record']}"
+        f"{st.session_state.control_fields['008']['cataloging_source']}"
+    )
+    
+    st.text_input("008 - معاينة الحقل", value=eight_field, disabled=True)
+    
+    # Initialize session state for MARC data fields
+    if "marc_fields" not in st.session_state:
+        st.session_state.marc_fields = []
 
-    # Language selection for 008 field
-    lang_options = {
-        "العربية": "ara",
-        "الإنجليزية": "eng",
-        "الفرنسية": "fre",
-        "الإسبانية": "spa",
-        "الألمانية": "ger"
-    }
-    selected_lang = st.selectbox("008 - لغة المادة", list(lang_options.keys()), index=0)
-    lang_code = lang_options[selected_lang]
-
-    st.markdown("**📌 نوع المصدر**")
-    source_type = st.radio("اختر نوع المصدر", ["📚 كتاب", "🎓 رسالة جامعية"])
-
-    # الحقول العامة
+    st.markdown("### ➕ إضافة حقول البيانات (Data Fields)")
+    
+    # Field tag input
+    tag = st.text_input("وسم الحقل (ثلاثة أرقام)", placeholder="245", key="custom_tag")
+    if tag and (len(tag) != 3 or not tag.isdigit()):
+        st.error("يجب أن يتكون وسم الحقل من 3 أرقام")
+    
+    # Data field (010-999)
     col1, col2 = st.columns(2)
     with col1:
-        control_001 = st.text_input("001 - رقم التسجيلة أو الضبط (يُولد تلقائيًا إذا تُرك فارغًا)")
-        control_003 = st.text_input("003 - معرف النظام (اسم البرنامج مثل MARC-AI)", "MARC-AI")
+        ind1 = st.text_input("المؤشر الأول", max_chars=1, value=" ", placeholder="0-9 أو #")
     with col2:
-        pub_year = st.text_input("008 - سنة النشر", "2024")
-        form_of_item = st.selectbox("008 - شكل المادة", ["طباعة", "إلكتروني", "ميكروفيلم"], index=0)
-
-    if source_type == "📚 كتاب":
-        field_020 = st.text_input("020 - الترقيم الدولي الموحد للكتاب (ISBN)")
-        field_250 = st.text_input("250 - بيانات الطبعة")
-    else:
-        field_502 = st.text_area("502 - بيانات الرسالة العلمية")
-        field_502_uni = st.text_input("502$b - الجامعة المانحة")
-        field_502_year = st.text_input("502$c - سنة المنح")
-
-    st.markdown("### 🧾 الوصف الببليوغرافي")
-    field_040a = st.text_input("040$a - جهة الفهرسة", "المكتبة الوطنية")
-    field_100 = st.text_input("100 - اسم المؤلف (المدخل الرئيسي)", placeholder="الاسم الأخير، الاسم الأول")
+        ind2 = st.text_input("المؤشر الثاني", max_chars=1, value=" ", placeholder="0-9 أو #")
     
-    col245a, col245b = st.columns([3, 1])
-    with col245a:
-        field_245a = st.text_input("245$a - العنوان الرئيسي", placeholder="العنوان الرئيسي للمصدر")
-    with col245b:
-        field_245b = st.text_input("245$b - العنوان الفرعي", placeholder="عنوان فرعي إن وجد")
+    st.markdown("*الحقول الفرعية*")
+    subfields = []
+    num_subfields = st.number_input("عدد الحقول الفرعية", 1, 10, 1)
     
-    field_245c = st.text_input("245$c - بيان المسؤولية", placeholder="المؤلف أو المحرر")
+    for i in range(num_subfields):
+        cols = st.columns([1, 5])
+        with cols[0]:
+            code = st.text_input(f"رمز الحقل الفرعي {i+1}", max_chars=1, placeholder="a-z أو 0-9")
+            if code and (len(code) != 1 or not code.isalnum()):
+                st.error("يجب أن يكون رمز الحقل الفرعي حرفًا أو رقمًا واحدًا")
+        with cols[1]:
+            value = st.text_input(f"قيمة الحقل الفرعي {i+1}", placeholder="النص")
+        subfields.append((code, value))
     
-    col264a, col264b, col264c = st.columns(3)
-    with col264a:
-        field_264a = st.text_input("264$a - مكان النشر", placeholder="المدينة، البلد")
-    with col264b:
-        field_264b = st.text_input("264$b - الناشر / المؤسسة", placeholder="اسم الناشر")
-    with col264c:
-        field_264c = st.text_input("264$c - سنة النشر / الانتاج", placeholder="سنة النشر")
-    
-    col300a, col300b = st.columns(2)
-    with col300a:
-        field_300a = st.text_input("300$a - عدد الصفحات/الأجزاء", placeholder="مثال: 320 صفحة")
-    with col300b:
-        field_300b = st.text_input("300$b - الرسوم/الملاحق", placeholder="مثال: رسوم إيضاحية")
-
-    st.markdown("### 📦 المحتوى الإضافي")
-    field_504 = st.text_area("504 - تبصرة ببليوجرافية", placeholder="المراجع الببليوجرافية")
-    field_520 = st.text_area("520 - الملخص / المستخلص", placeholder="ملخص محتوى المصدر")
-    
-    if source_type == "🎓 رسالة جامعية":
-        field_546 = st.text_input("546 - تبصرة اللغة", placeholder="مثال: النص بالعربية والإنجليزية")
-
-    st.markdown("### 🏷 الفهرسة الموضوعية")
-    subjects = st.text_area("650 - رؤوس الموضوعات (افصل بينها بفاصلة)", placeholder="اقتصاد, تعليم, تكنولوجيا")
-    
-    st.markdown("### 👥 الأسماء الإضافية")
-    additional_700 = st.text_area("700 - أسماء أشخاص إضافيين (افصل بينها بفاصلة)", placeholder="مشرف, محرر, مشارك")
-    
-    st.markdown("### ➕ حقول MARC مخصصة (اختياري)")
-    with st.expander("إضافة حقول غير موجودة في النموذج أعلاه"):
-        # Initialize session state
-        if "custom_fields" not in st.session_state:
-            st.session_state.custom_fields = []
-        
-        field_type = st.radio("نوع الحقل", ["حقل تحكم (001-009)", "حقل بيانات (010-999)"], key="field_type")
-        
-        tag = st.text_input("وسم الحقل (ثلاثة أرقام)", placeholder="245", key="custom_tag")
-        if tag and (len(tag) != 3 or not tag.isdigit()):
-            st.error("يجب أن يتكون وسم الحقل من 3 أرقام")
-        
-        # Control field (001-009)
-        if field_type == "حقل تحكم (001-009)":
-            data = st.text_area("بيانات الحقل", placeholder="أدخل البيانات هنا")
-        
-        # Data field (010-999)
+    if st.button("➕ أضف هذا الحقل", key="add_custom_field"):
+        if not tag or len(tag) != 3 or not tag.isdigit():
+            st.error("وسم الحقل غير صالح")
         else:
-            col1, col2 = st.columns(2)
-            with col1:
-                ind1 = st.text_input("المؤشر الأول", max_chars=1, value=" ", placeholder="0-9 أو #")
-            with col2:
-                ind2 = st.text_input("المؤشر الثاني", max_chars=1, value=" ", placeholder="0-9 أو #")
+            # Validate subfields
+            valid_subfields = True
+            for code, value in subfields:
+                if not code or not value or len(code) != 1 or not code.isalnum():
+                    st.error(f"رمز أو قيمة الحقل الفرعي غير صالحة: ${code} {value}")
+                    valid_subfields = False
+                    break
             
-            st.markdown("**الحقول الفرعية**")
-            subfields = []
-            num_subfields = st.number_input("عدد الحقول الفرعية", 1, 10, 1)
-            
-            for i in range(num_subfields):
-                cols = st.columns([1, 5])
-                with cols[0]:
-                    code = st.text_input(f"رمز الحقل الفرعي {i+1}", max_chars=1, placeholder="a-z أو 0-9")
-                    if code and (len(code) != 1 or not code.isalnum()):
-                        st.error("يجب أن يكون رمز الحقل الفرعي حرفًا أو رقمًا واحدًا")
-                with cols[1]:
-                    value = st.text_input(f"قيمة الحقل الفرعي {i+1}", placeholder="النص")
-                subfields.append((code, value))
-        
-        if st.button("➕ أضف هذا الحقل", key="add_custom_field"):
-            if not tag or len(tag) != 3 or not tag.isdigit():
-                st.error("وسم الحقل غير صالح")
-            else:
+            if valid_subfields:
                 new_field = {
                     "tag": tag,
-                    "type": "control" if field_type == "حقل تحكم (001-009)" else "data"
+                    "ind1": ind1 if ind1.strip() else " ",
+                    "ind2": ind2 if ind2.strip() else " ",
+                    "subfields": [(c, v) for c, v in subfields if c and v]
                 }
-                
-                if new_field["type"] == "control":
-                    if not data.strip():
-                        st.error("بيانات الحقل مطلوبة")
-                    else:
-                        new_field["data"] = data
-                        st.session_state.custom_fields.append(new_field)
-                        st.success("تمت إضافة الحقل!")
-                else:
-                    # Validate subfields
-                    valid_subfields = True
-                    for code, value in subfields:
-                        if not code or not value or len(code) != 1 or not code.isalnum():
-                            st.error(f"رمز أو قيمة الحقل الفرعي غير صالحة: ${code} {value}")
-                            valid_subfields = False
-                            break
-                    
-                    if valid_subfields:
-                        new_field["ind1"] = ind1 if ind1.strip() else " "
-                        new_field["ind2"] = ind2 if ind2.strip() else " "
-                        new_field["subfields"] = [(c, v) for c, v in subfields if c and v]
-                        st.session_state.custom_fields.append(new_field)
-                        st.success("تمت إضافة الحقل!")
+                st.session_state.marc_fields.append(new_field)
+                st.success("تمت إضافة الحقل!")
+    
+    st.markdown("*الحقول المضافة:*")
+    for i, field in enumerate(st.session_state.marc_fields):
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            subfields_str = " ".join([f"${c} {v}" for c, v in field["subfields"]])
+            st.write(f"{field['tag']}: {field['ind1']}{field['ind2']} {subfields_str}")
         
-        st.markdown("**الحقول المضافة:**")
-        for i, field in enumerate(st.session_state.custom_fields):
-            st.write(f"{field['tag']}: ", end="")
-            if field["type"] == "control":
-                st.write(field["data"])
-            else:
-                subfields_str = " ".join([f"${c} {v}" for c, v in field["subfields"]])
-                st.write(f"{field['ind1']}{field['ind2']} {subfields_str}")
-            
-            if st.button(f"حذف {i+1}", key=f"del_{i}"):
-                del st.session_state.custom_fields[i]
+        with col2:
+            # Use a unique key for each delete button
+            if st.button("🗑", key=f"del_{i}_{field['tag']}"):
+                # Remove the field from the list
+                st.session_state.marc_fields.pop(i)
                 st.rerun()
 
     # زر إنشاء السجل
     if st.button("💾 حفظ وتوليد الملف"):
         # التحقق من الحقول الإلزامية
-        required_fields = {
-            "100": field_100,
-            "245$a": field_245a,
-            "264$b": field_264b,
-            "264$c": field_264c
-        }
-        
-        missing_fields = [name for name, value in required_fields.items() if not value.strip()]
-        
-        if missing_fields:
-            st.error(f"❌ الحقول التالية مطلوبة: {', '.join(missing_fields)}")
-            st.stop()
+        if not st.session_state.control_fields["001"].strip():
+            st.session_state.control_fields["001"] = generate_control_number()
         
         record = Record()
-        record.leader = '00000nam a2200000 u 4500'
-
-        # توليد التاريخ والوقت
-        current_time_005 = datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S.0')
         
-        # بناء حقل 008 ديناميكيًا
-        form_code = {
-            "طباعة": "s",
-            "إلكتروني": "s",
-            "ميكروفيلم": "m"
-        }.get(form_of_item, "s")
+        # تعيين حقول التحكم
+        record.leader = st.session_state.control_fields["000"]
+        record.add_field(Field(tag='001', data=st.session_state.control_fields["001"]))
+        record.add_field(Field(tag='003', data=st.session_state.control_fields["003"]))
+        record.add_field(Field(tag='005', data=st.session_state.control_fields["005"]))
         
-        fixed_field_008 = (
-            datetime.datetime.today().strftime("%y%m%d") + 
-            f"{form_code}{pub_year}####xx###########{lang_code}#d"
+        # بناء حقل 008 من المكونات
+        eight_field_data = (
+            f"{st.session_state.control_fields['008']['entry_date']}"
+            f"{st.session_state.control_fields['008']['pub_status']}"
+            f"{st.session_state.control_fields['008']['date1']}"
+            f"{st.session_state.control_fields['008']['date2']}"
+            f"{st.session_state.control_fields['008']['place']}"
+            f"{st.session_state.control_fields['008']['illustrations']}"
+            f"{st.session_state.control_fields['008']['target_audience']}"
+            f"{st.session_state.control_fields['008']['form_of_item']}"
+            f"{st.session_state.control_fields['008']['nature_of_contents']}"
+            f"{st.session_state.control_fields['008']['govt_pub']}"
+            f"{st.session_state.control_fields['008']['conference']}"
+            f"{st.session_state.control_fields['008']['festschrift']}"
+            f"{st.session_state.control_fields['008']['index']}"
+            f"{st.session_state.control_fields['008']['literary_form']}"
+            f"{st.session_state.control_fields['008']['biography']}"
+            f"#{st.session_state.control_fields['008']['language']}#"  # Position 34 is blank
+            f"{st.session_state.control_fields['008']['modified_record']}"
+            f"{st.session_state.control_fields['008']['cataloging_source']}"
         )
+        
+        record.add_field(Field(tag='008', data=eight_field_data))
 
-        # توليد 001 تلقائي لو فاضي
-        control_001 = control_001.strip() or generate_control_number()
-
-        # الحقول الأساسية
-        record.add_field(Field(tag='001', data=control_001))
-        record.add_field(Field(tag='003', data=control_003))
-        record.add_field(Field(tag='005', data=current_time_005))
-        record.add_field(Field(tag='008', data=fixed_field_008))
-
-        if source_type == "📚 كتاب" and field_020:
-            record.add_field(Field(tag='020', indicators=['#', '#'], subfields=sf('a', field_020)))
-
-        record.add_field(Field(tag='040', indicators=['#', '#'], subfields=sf('a', field_040a)))
-        record.add_field(Field(tag='100', indicators=['1', '#'], subfields=sf('a', field_100)))
-        
-        # حقل العنوان 245
-        subfields_245 = sf('a', field_245a)
-        if field_245b:
-            subfields_245.extend(sf('b', field_245b))
-        if field_245c:
-            subfields_245.extend(sf('c', field_245c))
-        record.add_field(Field(tag='245', indicators=['1', '0'], subfields=subfields_245))
-        
-        if source_type == "📚 كتاب" and field_250:
-            record.add_field(Field(tag='250', indicators=['#', '#'], subfields=sf('a', field_250)))
-        
-        # حقل النشر 264
-        subfields_264 = []
-        if field_264a:
-            subfields_264.extend(sf('a', field_264a))
-        subfields_264.extend(sf('b', field_264b, 'c', field_264c))
-        record.add_field(Field(tag='264', indicators=['#', '1'], subfields=subfields_264))
-        
-        # حقل الوصف المادي 300
-        subfields_300 = sf('a', field_300a)
-        if field_300b:
-            subfields_300.extend(sf('b', field_300b))
-        record.add_field(Field(tag='300', indicators=['#', '#'], subfields=subfields_300))
-        
-        record.add_field(Field(tag='336', indicators=['#', '#'], subfields=sf('a', 'text', 'b', 'txt', '2', 'rdacontent')))
-        record.add_field(Field(tag='337', indicators=['#', '#'], subfields=sf('a', 'unmediated', 'b', 'n', '2', 'rdamedia')))
-        record.add_field(Field(tag='338', indicators=['#', '#'], subfields=sf('a', 'volume', 'b', 'nc', '2', 'rdacarrier')))
-
-        if field_504:
-            record.add_field(Field(tag='504', indicators=['#', '#'], subfields=sf('a', field_504)))
-        if field_520:
-            record.add_field(Field(tag='520', indicators=['#', '#'], subfields=sf('a', field_520)))
-        
-        if source_type == "🎓 رسالة جامعية":
-            if field_502:
-                subfields_502 = sf('a', field_502)
-                if field_502_uni:
-                    subfields_502.extend(sf('b', field_502_uni))
-                if field_502_year:
-                    subfields_502.extend(sf('c', field_502_year))
-                record.add_field(Field(tag='502', indicators=['#', '#'], subfields=subfields_502))
-            if field_546:
-                record.add_field(Field(tag='546', indicators=['#', '#'], subfields=sf('a', field_546)))
-        
-        # رؤوس الموضوعات (متعددة)
-        if subjects:
-            for subject in [s.strip() for s in subjects.split(',') if s.strip()]:
-                record.add_field(Field(tag='650', indicators=['#', '0'], subfields=sf('a', subject)))
-        
-        # الأسماء الإضافية (متعددة)
-        if additional_700:
-            for person in [p.strip() for p in additional_700.split(',') if p.strip()]:
-                record.add_field(Field(tag='700', indicators=['1', '#'], subfields=sf('a', person)))
-
-        # Add custom fields to record
-        for field in st.session_state.custom_fields:
-            if field["type"] == "control":
-                record.add_field(Field(tag=field["tag"], data=field["data"]))
-            else:
-                subfield_objs = []
-                for code, value in field["subfields"]:
-                    subfield_objs.append(Subfield(code=code, value=value))
-                
-                record.add_field(Field(
-                    tag=field["tag"],
-                    indicators=[field["ind1"], field["ind2"]],
-                    subfields=subfield_objs
-                ))
+        # Add all user-defined data fields to record
+        for field in st.session_state.marc_fields:
+            subfield_objs = []
+            for code, value in field["subfields"]:
+                subfield_objs.append(Subfield(code=code, value=value))
+            
+            record.add_field(Field(
+                tag=field["tag"],
+                indicators=[field["ind1"], field["ind2"]],
+                subfields=subfield_objs
+            ))
         
         # SORT FIELDS IN PROPER MARC ORDER
         def get_field_order(field):
@@ -836,13 +902,27 @@ with tab1:
 
         # Generate unique filename
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_filename = f"{field_245a}"
+        
+        # Try to get title for filename
+        title = "marc_record"
+        for field in record.fields:
+            if field.tag == '245':
+                for subfield in field.subfields:
+                    if subfield.code == 'a':
+                        title = subfield.value[:50]  # Limit length
+                        break
+                break
+        
+        # Clean title for filename
+        import re
+        title = re.sub(r'[^\w\s-]', '', title).strip()
+        title = re.sub(r'[-\s]+', '_', title)
         
         # Define file paths
-        marc_path = os.path.join(output_dir, f"{base_filename}.mrc")
-        txt_path = os.path.join(output_dir, f"{base_filename}.txt")
-        xml_path = os.path.join(output_dir, f"{base_filename}.xml")
-        xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
+        marc_path = os.path.join(output_dir, f"{title}_{timestamp}.mrc")
+        txt_path = os.path.join(output_dir, f"{title}_{timestamp}.txt")
+        xml_path = os.path.join(output_dir, f"{title}_{timestamp}.xml")
+        xml_db_path = os.path.join(XML_DB_DIR, f"{title}_{timestamp}.xml")
 
         # Save files to output directory
         try:
@@ -865,12 +945,7 @@ with tab1:
             
             # Copy XML to database directory
             shutil.copy2(xml_path, xml_db_path)
-            # Clear vector database cache to include new record
-            if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
-            if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
-            if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
-            st.cache_resource.clear()
-
+            
             st.success(f"✅ تم إنشاء السجل بنجاح وحفظ الملفات في مجلد output!")
             st.success(f"✅ تم حفظ نسخة XML في قاعدة البيانات: {xml_db_path}")
 
@@ -879,13 +954,10 @@ with tab1:
             st.code("\n".join(str(field) for field in record))
 
             st.session_state.generated_files = {
-            "mrc": (marc_path, f"{base_filename}.mrc", "application/marc"),
-            "txt": (txt_path, f"{base_filename}.txt", "text/plain"), 
-            "xml": (xml_path, f"{base_filename}.xml", "text/xml")
+            "mrc": (marc_path, f"{title}_{timestamp}.mrc", "application/marc"),
+            "txt": (txt_path, f"{title}_{timestamp}.txt", "text/plain"), 
+            "xml": (xml_path, f"{title}_{timestamp}.xml", "text/xml")
             }
-
-            # Clear custom fields after successful creation
-            st.session_state.custom_fields = []
 
         except Exception as e:
             st.error(f"❌ حدث خطأ أثناء حفظ الملفات: {str(e)}")
@@ -924,7 +996,7 @@ with tab1:
                 key="xml_download"
             ):
                 st.toast("تم بدء تحميل ملف XML")
-
+                
 # Cached file readers for Tab4
 @lru_cache(maxsize=32)
 def read_text_file_cached(file_path):
