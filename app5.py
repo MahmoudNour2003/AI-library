@@ -582,9 +582,7 @@ with tab1:
                 "cataloging_source": "d"
             }
         }
-    
-    # حقول التحكم الأساسية
-    st.markdown("### 🎛 حقول التحكم (Control Fields)")
+
     
     # حقل 000 - الليدير
     st.session_state.control_fields["000"] = st.text_input(
@@ -614,9 +612,7 @@ with tab1:
         help="صيغة YYYYMMDDHHMMSS.0"
     )
     
-    # حقل 008 - حقل البيانات الثابتة (مفصل)
-    st.markdown("### 📊 حقل 008 - البيانات الثابتة (مفصل)")
-    
+
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -748,8 +744,7 @@ with tab1:
             help="d: مكتبة أخرى, u: غير معروف"
         )
     
-    # معاينة حقل 008
-    st.markdown("### 👀 معاينة حقل 008")
+
     eight_field = (
         f"{st.session_state.control_fields['008']['entry_date']}"
         f"{st.session_state.control_fields['008']['pub_status']}"
@@ -777,7 +772,7 @@ with tab1:
     if "marc_fields" not in st.session_state:
         st.session_state.marc_fields = []
 
-    st.markdown("### ➕ إضافة حقول البيانات (Data Fields)")
+
     
     # Field tag input
     tag = st.text_input("وسم الحقل (ثلاثة أرقام)", placeholder="245", key="custom_tag")
