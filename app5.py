@@ -945,7 +945,11 @@ with tab1:
             
             # Copy XML to database directory
             shutil.copy2(xml_path, xml_db_path)
-            
+            # Clear vector database cache to include new record
+            if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+            if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+            if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+            st.cache_resource.clear()
             st.success(f"✅ تم إنشاء السجل بنجاح وحفظ الملفات في مجلد output!")
             st.success(f"✅ تم حفظ نسخة XML في قاعدة البيانات: {xml_db_path}")
 
