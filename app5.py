@@ -390,22 +390,26 @@ def get_vector_database():
 
     return index, documents, metadata
 
-def extract_text_from_image(image_path, api_key):
+def extract_text_from_image(image_path, api_key, language="eng"):
     """
     Extracts text from an image using OCR.Space API.
+    :param image_path: Path to the image file.
+    :param api_key: Your OCR.Space API key.
+    :param language: Language code (e.g., "eng" for English, "ara" for Arabic).
     """
     url = "https://api.ocr.space/parse/image"
     with open(image_path, 'rb') as f:
         r = requests.post(
             url,
             files={"file": f},
-            data={"apikey": api_key, "language": "eng+ara"},
+            data={"apikey": api_key, "language": language},
             timeout=60
         )
     result = r.json()
     if result.get("IsErroredOnProcessing"):
         raise Exception(result.get("ErrorMessage", "OCR failed"))
     return result["ParsedResults"][0]["ParsedText"]
+
 def llm_metadata_to_marc(llm_metadata, output_base_path):
     """
     Builds a MARC record directly from LLM-extracted metadata (JSON).
@@ -1106,42 +1110,50 @@ with tab2:
                             pass
 
         elif option == "Image":
+            # Language selection dropdown
+            ocr_language = st.selectbox(
+                "Select OCR language:",
+                options=[("English", "eng"), ("Arabic", "ara")],
+                format_func=lambda x: x[0]
+            )[1]
+
             temp_image = os.path.join(temp_dir, f"{base_filename}.png")
             with st.spinner("Processing Image..."):
                 try:
                     with open(temp_image, "wb") as f:
                         f.write(uploaded_file.getbuffer())
-                    st.info("Extracting text via OCR.Space API...")
-                    text = extract_text_from_image(temp_image, ocr_api_key)
+                    st.info(f"Extracting text via OCR.Space API ({ocr_language})...")
+                    text = extract_text_from_image(temp_image, ocr_api_key, language=ocr_language)
                     st.info("Extracting metadata with AI...")
                     prompt = f"""
-    Extract the following metadata from this academic text and return ONLY valid JSON, no explanation:
-    - title (string)
-    - subtitle (string, optional)
-    - authors (list of full names)
-    - abstract (string, optional)
-    - subjects (list of strings, optional)  # MARC 650 field
-    - keywords (list of strings, optional)  # Alternative name for subjects
-    - publication year (string, YYYY format)
-    - publisher (string)
-    - doi (string, optional)
-    - isbn (string, optional)
-    - language (string, ISO 639-1 or 639-3 code)
-    - journal title (string, optional)
-    - volume (string, optional)
-    - issue (string, optional)
-    - pages (string, optional)
-    - additional notes (string, optional)
+            Extract the following metadata from this academic text and return ONLY valid JSON, no explanation:
+            - title (string)
+            - subtitle (string, optional)
+            - authors (list of full names)
+            - abstract (string, optional)
+            - subjects (list of strings, optional)  # MARC 650 field
+            - keywords (list of strings, optional)  # Alternative name for subjects
+            - publication year (string, YYYY format)
+            - publisher (string)
+            - doi (string, optional)
+            - isbn (string, optional)
+            - language (string, ISO 639-1 or 639-3 code)
+            - journal title (string, optional)
+            - volume (string, optional)
+            - issue (string, optional)
+            - pages (string, optional)
+            - additional notes (string, optional)
 
-    Text:
-    {text}
-"""
-
+            Text:
+            {text}
+        """
 
                     llm_response = ask_groq_model(prompt, api_key)
                     llm_metadata = extract_json_block(llm_response)
                     # Minimal TEI for compatibility
-                    record, marc_bin_path, marc_txt_path, marc_xml_path = llm_metadata_to_marc(llm_metadata, os.path.join(output_dir, base_filename))
+                    record, marc_bin_path, marc_txt_path, marc_xml_path = llm_metadata_to_marc(
+                        llm_metadata, os.path.join(output_dir, base_filename)
+                    )
 
                     if os.path.exists(marc_xml_path):
                         shutil.copy2(marc_xml_path, xml_db_path)
@@ -1165,6 +1177,7 @@ with tab2:
                             os.remove(temp_image)
                         except:
                             pass
+
 
     if st.session_state.get('current_record'):
         st.success(f"MARC records generated successfully! Saved in {output_dir}/")
