@@ -399,7 +399,7 @@ def extract_text_from_image(image_path, api_key):
         r = requests.post(
             url,
             files={"file": f},
-            data={"apikey": api_key, "language": "eng"},
+            data={"apikey": api_key, "language": "eng+ara"},
             timeout=60
         )
     result = r.json()
