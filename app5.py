@@ -1028,6 +1028,8 @@ with tab2:
     ocr_api_key = st.secrets.get("ocr_space_api_key", "helloworld")
 
     option = st.radio("Select input type:", ["PDF", "Image"])
+
+    # Show language selector immediately for images
     ocr_language = None
     if option == "Image":
         ocr_language = st.selectbox(
@@ -1036,16 +1038,35 @@ with tab2:
             format_func=lambda x: x[0]
         )[1]
 
-    uploaded_file = st.file_uploader(
-        "Choose a file", 
-        type=["pdf"] if option == "PDF" else ["png", "jpg", "jpeg"]
+    # ✅ SINGLE uploader that adapts to the option
+    uploads = st.file_uploader(
+        "Choose file(s)",
+        type=["pdf"] if option == "PDF" else ["png", "jpg", "jpeg"],
+        accept_multiple_files=(option == "Image")
     )
+
+    # Build a stable hash for the current selection to avoid reprocessing
     current_file_hash = None
-    if uploaded_file:
-        current_file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
+    uploaded_file = None           # for PDF
+    uploaded_images = []           # for Image
+
+    if option == "PDF":
+        uploaded_file = uploads
+        if uploaded_file:
+            current_file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
+    else:
+        uploaded_images = uploads or []
+        if uploaded_images:
+            md5_obj = hashlib.md5()
+            for img in uploaded_images:
+                md5_obj.update(img.name.encode("utf-8"))
+                md5_obj.update(img.getvalue())
+            current_file_hash = md5_obj.hexdigest()
+
+    has_upload = (uploaded_file is not None) if option == "PDF" else (len(uploaded_images) > 0)
 
     should_process = (
-        uploaded_file and api_key and
+        has_upload and api_key and
         (current_file_hash != st.session_state.get('processed_file_hash') or 
          st.session_state.get('processed_file_hash') is None)
     )
@@ -1053,14 +1074,15 @@ with tab2:
     if should_process:
         temp_dir = "temp"
         os.makedirs(temp_dir, exist_ok=True)
-        base_filename = Path(uploaded_file.name).stem
-
-        marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
-        marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
-        marc_xml_path = os.path.join(output_dir, f"{base_filename}.xml")
-        xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
 
         if option == "PDF":
+            base_filename = Path(uploaded_file.name).stem
+
+            marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
+            marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
+            marc_xml_path = os.path.join(output_dir, f"{base_filename}.xml")
+            xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
+
             temp_pdf = os.path.join(temp_dir, f"{base_filename}.pdf")
             with st.spinner("Processing PDF..."):
                 try:
@@ -1117,80 +1139,82 @@ with tab2:
                             pass
 
         elif option == "Image":
-            temp_dir = "temp"
-            os.makedirs(temp_dir, exist_ok=True)
+            # Derive a base name from first image; add suffix if multiple images
+            first_stem = Path(uploaded_images[0].name).stem
+            base_filename = first_stem + ("_batch" if len(uploaded_images) > 1 else "")
 
-            # Allow multiple images
-            uploaded_images = st.file_uploader(
-                "Choose one or more images",
-                type=["png", "jpg", "jpeg"],
-                accept_multiple_files=True
-            )
+            marc_bin_path = os.path.join(output_dir, f"{base_filename}.mrc")
+            marc_txt_path = os.path.join(output_dir, f"{base_filename}.txt")
+            marc_xml_path = os.path.join(output_dir, f"{base_filename}.xml")
+            xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
 
-            if uploaded_images:
-                all_text = ""
-                for i, img in enumerate(uploaded_images):
-                    temp_image = os.path.join(temp_dir, f"{base_filename}_{i}.png")
-                    with open(temp_image, "wb") as f:
-                        f.write(img.getbuffer())
+            all_text = ""
+            for i, img in enumerate(uploaded_images):
+                temp_image = os.path.join(temp_dir, f"{base_filename}_{i}.png")
+                with open(temp_image, "wb") as f:
+                    f.write(img.getbuffer())
 
-                    st.info(f"Extracting text from image {i+1}/{len(uploaded_images)} via OCR.Space API ({ocr_language})...")
+                st.info(f"Extracting text from image {i+1}/{len(uploaded_images)} via OCR.Space API ({ocr_language})...")
+                try:
+                    text = extract_text_from_image(temp_image, ocr_api_key, language=ocr_language)
+                    all_text += "\n\n" + (text or "")
+                except Exception as e:
+                    st.error(f"OCR failed for {img.name}: {e}")
+                finally:
+                    # Clean temp image
                     try:
-                        text = extract_text_from_image(temp_image, ocr_api_key, language=ocr_language)
-                        all_text += "\n\n" + text
-                    except Exception as e:
-                        st.error(f"OCR failed for {img.name}: {e}")
+                        os.remove(temp_image)
+                    except:
+                        pass
 
-                if all_text.strip():
-                    with st.spinner("Extracting metadata with AI..."):
-                        prompt = f"""
-                        Extract the following metadata from this academic text and return ONLY valid JSON, no explanation:
-                        - title (string)
-                        - subtitle (string, optional)
-                        - authors (list of full names)
-                        - abstract (string, optional)
-                        - subjects (list of strings, optional)
-                        - keywords (list of strings, optional)
-                        - publication year (string, YYYY format)
-                        - publisher (string)
-                        - doi (string, optional)
-                        - isbn (string, optional)
-                        - language (string, ISO 639-1 or 639-3 code)
-                        - journal title (string, optional)
-                        - volume (string, optional)
-                        - issue (string, optional)
-                        - pages (string, optional)
-                        - additional notes (string, optional)
+            if all_text.strip():
+                with st.spinner("Extracting metadata with AI..."):
+                    prompt = f"""
+                    Extract the following metadata from this academic text and return ONLY valid JSON, no explanation:
+                    - title (string)
+                    - subtitle (string, optional)
+                    - authors (list of full names)
+                    - abstract (string, optional)
+                    - subjects (list of strings, optional)  # MARC 650 field
+                    - keywords (list of strings, optional)  # Alternative name for subjects
+                    - publication year (string, YYYY format)
+                    - publisher (string)
+                    - doi (string, optional)
+                    - isbn (string, optional)
+                    - language (string, ISO 639-1 or 639-3 code)
+                    - journal title (string, optional)
+                    - volume (string, optional)
+                    - issue (string, optional)
+                    - pages (string, optional)
+                    - additional notes (string, optional)
 
-                        Text:
-                        {all_text}
-                        """
-                        llm_response = ask_groq_model(prompt, api_key)
-                        llm_metadata = extract_json_block(llm_response)
+                    Text:
+                    {all_text}
+                    """
+                    llm_response = ask_groq_model(prompt, api_key)
+                    llm_metadata = extract_json_block(llm_response)
 
-                    # Create MARC record from combined text
-                    record, marc_bin_path, marc_txt_path, marc_xml_path = llm_metadata_to_marc(
-                        llm_metadata, os.path.join(output_dir, base_filename)
-                    )
+                # Create MARC record from combined text
+                record, marc_bin_path, marc_txt_path, marc_xml_path = llm_metadata_to_marc(
+                    llm_metadata, os.path.join(output_dir, base_filename)
+                )
 
-                    if os.path.exists(marc_xml_path):
-                        shutil.copy2(marc_xml_path, xml_db_path)
-                        if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
-                        if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
-                        if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
-                        st.cache_resource.clear()
+                if os.path.exists(marc_xml_path):
+                    shutil.copy2(marc_xml_path, xml_db_path)
+                    if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+                    if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+                    if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+                    st.cache_resource.clear()
 
-                    st.session_state.current_record = record
-                    st.session_state.llm_metadata = llm_metadata
-                    st.session_state.marc_bin_path = marc_bin_path
-                    st.session_state.marc_txt_path = marc_txt_path
-                    st.session_state.marc_xml_path = marc_xml_path
-                    st.session_state.processed_file_hash = current_file_hash
-                    st.session_state.base_filename = base_filename
+                st.session_state.current_record = record
+                st.session_state.llm_metadata = llm_metadata
+                st.session_state.marc_bin_path = marc_bin_path
+                st.session_state.marc_txt_path = marc_txt_path
+                st.session_state.marc_xml_path = marc_xml_path
+                st.session_state.processed_file_hash = current_file_hash
+                st.session_state.base_filename = base_filename
 
-
-
-
+    # Output area
     if st.session_state.get('current_record'):
         st.success(f"MARC records generated successfully! Saved in {output_dir}/")
         st.subheader("Extracted Metadata")
