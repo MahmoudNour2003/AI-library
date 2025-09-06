@@ -1109,7 +1109,7 @@ with tab2:
                         except:
                             pass
 
-        if option == "Image":
+        elif option == "Image":
             # Language selection dropdown
             ocr_language = st.selectbox(
                 "Select OCR language:",
@@ -1117,101 +1117,66 @@ with tab2:
                 format_func=lambda x: x[0]
             )[1]
 
-            # Allow multiple image uploads
-            uploaded_images = st.file_uploader(
-                "Choose image(s)", 
-                type=["png", "jpg", "jpeg"], 
-                accept_multiple_files=True
-            )
+            temp_image = os.path.join(temp_dir, f"{base_filename}.png")
+            with st.spinner("Processing Image..."):
+                try:
+                    with open(temp_image, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    st.info(f"Extracting text via OCR.Space API ({ocr_language})...")
+                    text = extract_text_from_image(temp_image, ocr_api_key, language=ocr_language)
+                    st.info("Extracting metadata with AI...")
+                    prompt = f"""
+            Extract the following metadata from this academic text and return ONLY valid JSON, no explanation:
+            - title (string)
+            - subtitle (string, optional)
+            - authors (list of full names)
+            - abstract (string, optional)
+            - subjects (list of strings, optional)  # MARC 650 field
+            - keywords (list of strings, optional)  # Alternative name for subjects
+            - publication year (string, YYYY format)
+            - publisher (string)
+            - doi (string, optional)
+            - isbn (string, optional)
+            - language (string, ISO 639-1 or 639-3 code)
+            - journal title (string, optional)
+            - volume (string, optional)
+            - issue (string, optional)
+            - pages (string, optional)
+            - additional notes (string, optional)
 
-            if uploaded_images:
-                current_file_hash = hashlib.md5(
-                    b"".join([img.getvalue() for img in uploaded_images])
-                ).hexdigest()
-
-                should_process = (
-                    uploaded_images and api_key and
-                    (current_file_hash != st.session_state.get('processed_file_hash') or 
-                    st.session_state.get('processed_file_hash') is None)
-                )
-
-                if should_process:
-                    temp_dir = "temp"
-                    os.makedirs(temp_dir, exist_ok=True)
-                    base_filename = "_".join([Path(img.name).stem for img in uploaded_images])
-
-                    # Save all images temporarily and extract text
-                    merged_text = ""
-                    temp_image_paths = []
-                    for idx, img in enumerate(uploaded_images):
-                        temp_image = os.path.join(temp_dir, f"{base_filename}_{idx}.png")
-                        with open(temp_image, "wb") as f:
-                            f.write(img.getbuffer())
-                        temp_image_paths.append(temp_image)
-                        st.info(f"Extracting text from image {img.name} via OCR.Space API ({ocr_language})...")
-                        try:
-                            text = extract_text_from_image(temp_image, ocr_api_key, language=ocr_language)
-                            merged_text += "\n" + text
-                        except Exception as e:
-                            st.error(f"Error extracting text from {img.name}: {str(e)}")
-                        finally:
-                            if os.path.exists(temp_image):
-                                try:
-                                    os.remove(temp_image)
-                                except:
-                                    pass
-
-                    if merged_text.strip():
-                        st.info("Extracting metadata with AI...")
-                        prompt = f"""
-        Extract the following metadata from this academic text and return ONLY valid JSON, no explanation:
-        - title (string)
-        - subtitle (string, optional)
-        - authors (list of full names)
-        - abstract (string, optional)
-        - subjects (list of strings, optional)  # MARC 650 field
-        - keywords (list of strings, optional)  # Alternative name for subjects
-        - publication year (string, YYYY format)
-        - publisher (string)
-        - doi (string, optional)
-        - isbn (string, optional)
-        - language (string, ISO 639-1 or 639-3 code)
-        - journal title (string, optional)
-        - volume (string, optional)
-        - issue (string, optional)
-        - pages (string, optional)
-        - additional notes (string, optional)
-
-        Text:
-        {merged_text}
+            Text:
+            {text}
         """
+
+                    llm_response = ask_groq_model(prompt, api_key)
+                    llm_metadata = extract_json_block(llm_response)
+                    # Minimal TEI for compatibility
+                    record, marc_bin_path, marc_txt_path, marc_xml_path = llm_metadata_to_marc(
+                        llm_metadata, os.path.join(output_dir, base_filename)
+                    )
+
+                    if os.path.exists(marc_xml_path):
+                        shutil.copy2(marc_xml_path, xml_db_path)
+                        if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
+                        if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
+                        if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
+                        st.cache_resource.clear()
+
+                    st.session_state.current_record = record
+                    st.session_state.llm_metadata = llm_metadata
+                    st.session_state.marc_bin_path = marc_bin_path
+                    st.session_state.marc_txt_path = marc_txt_path
+                    st.session_state.marc_xml_path = marc_xml_path
+                    st.session_state.processed_file_hash = current_file_hash
+                    st.session_state.base_filename = base_filename
+                except Exception as e:
+                    st.error(f"Error processing image: {str(e)}")
+                finally:
+                    if os.path.exists(temp_image):
                         try:
-                            llm_response = ask_groq_model(prompt, api_key)
-                            llm_metadata = extract_json_block(llm_response)
-                            record, marc_bin_path, marc_txt_path, marc_xml_path = llm_metadata_to_marc(
-                                llm_metadata, os.path.join(output_dir, base_filename)
-                            )
-
-                            xml_db_path = os.path.join(XML_DB_DIR, f"{base_filename}.xml")
-                            if os.path.exists(marc_xml_path):
-                                shutil.copy2(marc_xml_path, xml_db_path)
-                                if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
-                                if os.path.exists(DOCUMENTS_PATH): os.remove(DOCUMENTS_PATH)
-                                if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
-                                st.cache_resource.clear()
-
-                            st.session_state.current_record = record
-                            st.session_state.llm_metadata = llm_metadata
-                            st.session_state.marc_bin_path = marc_bin_path
-                            st.session_state.marc_txt_path = marc_txt_path
-                            st.session_state.marc_xml_path = marc_xml_path
-                            st.session_state.processed_file_hash = current_file_hash
-                            st.session_state.base_filename = base_filename
-                        except Exception as e:
-                            st.error(f"Error processing images: {str(e)}")
-                    else:
-                        st.error("No text could be extracted from the uploaded images.")
-
+                            os.remove(temp_image)
+                        except:
+                            pass
 
 
     if st.session_state.get('current_record'):
