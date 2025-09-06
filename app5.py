@@ -534,8 +534,7 @@ def llm_metadata_to_marc(llm_metadata, output_base_path):
 # ─────────────────────────────────────────────
 st.set_page_config(page_title="Marc System", layout="centered")
 st.title("📚 Marc ")
-if "active_tab" not in st.session_state:
-    st.session_state.active_tab = "📋 إدخال MARC يدويًا"
+
 # --- Updated Tabs ---
 tab_titles = [
     "📋 إدخال MARC يدويًا", 
@@ -545,6 +544,7 @@ tab_titles = [
     "🤖 مساعد الأسئلة والأجوبة"
 ]
 tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_titles)
+
 # Helper to set active tab on rerun
 def set_active(tab_name):
     st.session_state.active_tab = tab_name
