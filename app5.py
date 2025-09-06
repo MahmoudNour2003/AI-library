@@ -534,7 +534,8 @@ def llm_metadata_to_marc(llm_metadata, output_base_path):
 # ─────────────────────────────────────────────
 st.set_page_config(page_title="Marc System", layout="centered")
 st.title("📚 Marc ")
-
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "📋 إدخال MARC يدويًا"
 # --- Updated Tabs ---
 tab_titles = [
     "📋 إدخال MARC يدويًا", 
@@ -544,10 +545,13 @@ tab_titles = [
     "🤖 مساعد الأسئلة والأجوبة"
 ]
 tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_titles)
-
+# Helper to set active tab on rerun
+def set_active(tab_name):
+    st.session_state.active_tab = tab_name
 # ─────────────────────────────────────────────
 # 📋 Tab 1: Manual MARC Entry
 with tab1:
+    set_active("📋 إدخال MARC يدويًا")
     st.subheader("✍ إدخال بيانات MARC يدويًا - حقول التحكم")
     
     # Initialize session state for control fields
@@ -1013,6 +1017,7 @@ def read_marc_file_cached(file_path):
 # ─────────────────────────────────────────────
 # 📄 Tab 2: PDF / Image to MARC
 with tab2:
+    set_active("📄 تحويل PDF إلى MARC")
     st.subheader("📄 PDF / Image to MARC File")
     st.write("Upload a PDF (via GROBID) or an Image (via OCR.Space)")
 
@@ -1232,6 +1237,7 @@ with tab2:
 # ─────────────────────────────────────────────
 # 🖼️ Tab 3: Read MARC File
 with tab3:
+    set_active("🖼️ استخراج بيانات من marc file ")
     st.subheader("📂 قراءة MARC موجود (.mrc)")
     uploaded_marc = st.file_uploader("⬆️ اختر ملف MARC (.mrc)", type=["mrc"])
     if uploaded_marc is not None:
@@ -1275,6 +1281,7 @@ with tab3:
 # ─────────────────────────────────────────────
 # 🔍 Tab 4: Saved Records
 with tab4:
+    set_active("🔍 عرض السجلات المحفوظة")
     st.subheader("📚 Library Records")
     try:
         all_files = os.listdir(output_dir)
@@ -1366,6 +1373,7 @@ with tab4:
 # 🤖 Tab 5: Q&A Bot (New)
 # ─────────────────────────────────────────────
 with tab5:
+    set_active("🤖 مساعد الأسئلة والأجوبة")
     st.subheader("🤖 Library Q&A Assistant")
     st.write("Ask natural language questions about books in our library. The database will be built on the first query.")
     
@@ -1447,4 +1455,3 @@ with tab5:
                 
             except Exception as e:
                 st.error(f"Error generating answer: {str(e)}")
-
