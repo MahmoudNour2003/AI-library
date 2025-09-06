@@ -1028,6 +1028,13 @@ with tab2:
     ocr_api_key = st.secrets.get("ocr_space_api_key", "helloworld")
 
     option = st.radio("Select input type:", ["PDF", "Image"])
+    ocr_language = None
+    if option == "Image":
+        ocr_language = st.selectbox(
+            "Select OCR language:",
+            options=[("English", "eng"), ("Arabic", "ara")],
+            format_func=lambda x: x[0]
+        )[1]
 
     uploaded_file = st.file_uploader(
         "Choose a file", 
@@ -1110,13 +1117,7 @@ with tab2:
                             pass
 
         elif option == "Image":
-            # Language selection dropdown
-            ocr_language = st.selectbox(
-                "Select OCR language:",
-                options=[("English", "eng"), ("Arabic", "ara")],
-                format_func=lambda x: x[0]
-            )[1]
-
+            
             temp_image = os.path.join(temp_dir, f"{base_filename}.png")
             with st.spinner("Processing Image..."):
                 try:
