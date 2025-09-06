@@ -34,7 +34,8 @@ METADATA_PATH = "metadata.pkl"
 # Load the embedding model once
 @st.cache_resource
 def load_embedding_model():
-    return SentenceTransformer('all-MiniLM-L6-v2')
+    with st.spinner("🔄 Loading embedding model (first time only)…"):
+        return SentenceTransformer('all-MiniLM-L6-v2')
 
 EMBEDDING_MODEL = load_embedding_model()
 
