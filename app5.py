@@ -456,15 +456,7 @@ def llm_metadata_to_marc(llm_metadata, output_base_path):
         Subfield('c', format_authors(authors) + '.')
     ]))
 
-    # Authors fields
-    for i, author in enumerate(authors):
-        tag = '100' if i == 0 else '700'
-        record.add_field(Field(tag=tag, indicators=['1', '#'], subfields=[
-            Subfield('a', author),
-            Subfield('e', 'author.')
-        ]))
 
-    # Abstract
     abstract = llm_metadata.get("abstract", "")
     if abstract:
         record.add_field(Field(tag='520', indicators=['#', '#'], subfields=[Subfield('a', abstract)]))
