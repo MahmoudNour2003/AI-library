@@ -1035,13 +1035,16 @@ with tab2:
             format_func=lambda x: x[0]
         )[1]
 
-    # ✅ SINGLE uploader that adapts to the option
+    # at the top
+    if "uploader_key" not in st.session_state:
+        st.session_state.uploader_key = 0
+
     uploads = st.file_uploader(
         "Choose file(s)",
         type=["pdf"] if option == "PDF" else ["png", "jpg", "jpeg"],
-        accept_multiple_files=(option == "Image")
+        accept_multiple_files=(option == "Image"),
+        key=f"uploader_{st.session_state.uploader_key}"
     )
-
     # Build a stable hash for the current selection to avoid reprocessing
     current_file_hash = None
     uploaded_file = None           # for PDF
@@ -1195,8 +1198,9 @@ with tab2:
                 record, marc_bin_path, marc_txt_path, marc_xml_path = llm_metadata_to_marc(
                     llm_metadata, os.path.join(output_dir, base_filename)
                 )
-                # clear previously uploaded images to avoid re-processing
-                uploaded_images.clear()
+                # reset the uploader so previous images disappear
+                st.session_state.uploader_key += 1
+
                 if os.path.exists(marc_xml_path):
                     shutil.copy2(marc_xml_path, xml_db_path)
                     if os.path.exists(FAISS_INDEX_PATH): os.remove(FAISS_INDEX_PATH)
