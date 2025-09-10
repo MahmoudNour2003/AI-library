@@ -427,8 +427,8 @@ def llm_metadata_to_marc(llm_metadata, output_base_path):
     pub_year = llm_metadata.get("publication year", "2024")
 
     # Language
-    lang_code = llm_metadata.get("language", "en")
-    lang_code = lang_code[:3].lower().ljust(3, '#')
+    lang_code = str(llm_metadata.get("language", "en")).strip().lower()
+    lang_code = lang_code[:3].ljust(3, '#')
     record.add_field(Field(tag='008', data=generate_008_field(pub_year, lang_code)))
     record.add_field(Field(tag='041', indicators=['0', '#'], subfields=[Subfield('a', lang_code)]))
 
