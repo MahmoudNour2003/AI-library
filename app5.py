@@ -101,7 +101,7 @@ def ask_groq_model(prompt, api_key):
         "Content-Type": "application/json",
     }
     data = {
-        "model": "gemma2-9b-it",
+        "model": "llama-3.1-8b-instant",
         "messages": [
             {"role": "system", "content": "You are an academic assistant that extracts metadata from papers."},
             {"role": "user", "content": prompt}
