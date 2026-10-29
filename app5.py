@@ -124,7 +124,7 @@ def ask_groq_model(prompt, api_key):
         "Content-Type": "application/json",
     }
     data = {
-        "model": "llama-3.1-8b-instant",
+        "model": "openai/gpt-oss-20b",
         "messages": [
             {"role": "system", "content": "You are an academic assistant that extracts metadata from papers."},
             {"role": "user", "content": prompt}
