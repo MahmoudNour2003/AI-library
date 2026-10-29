@@ -67,24 +67,47 @@ def export_txt(record):
 def sf(*args):
     return [Subfield(code=code, value=value) for code, value in zip(args[::2], args[1::2]) if value.strip()]
 
-GROBID_URL = "https://kermitt2-grobid.hf.space/api/processFulltextDocument"
+GROBID_URL = "https://grobidOrg-grobid-full2.hf.space/api/processFulltextDocument"
 
 def send_pdf_to_grobid_header(pdf_path):
     with open(pdf_path, 'rb') as f:
-        files = {'input': (os.path.basename(pdf_path), f, 'application/pdf')}
-        headers = {'Accept': 'application/tei+xml, text/xml, application/xml;q=0.9, */*;q=0.8'}
-        params = {
-            'consolidateHeader': '1', 'consolidateCitations': '0',
-            'teiCoordinates': 'persName,figure,ref,biblStruct', 'generateIDs': '1',
-            'segmentSentences': '1', 'includeRawAffiliations': '1',
-            'includeRawAuthors': '1', 'includeRawCitations': '0'
+        files = {
+            'input': (os.path.basename(pdf_path), f, 'application/pdf')
         }
-        response = requests.post(GROBID_URL, files=files, headers=headers, params=params, timeout=120)
+
+        headers = {
+            'Accept': 'application/tei+xml, text/xml, application/xml;q=0.9, */*;q=0.8'
+        }
+
+        params = {
+            'consolidateHeader': '1',
+            'consolidateCitations': '0',
+            'teiCoordinates': 'persName,figure,ref,biblStruct',
+            'generateIDs': '1',
+            'segmentSentences': '1',
+            'includeRawAffiliations': '1',
+            'includeRawAuthors': '1',
+            'includeRawCitations': '0'
+        }
+
+        response = requests.post(
+            GROBID_URL,
+            files=files,
+            headers=headers,
+            params=params,
+            timeout=120
+        )
+
         print("[*] Status code:", response.status_code)
+
         if response.status_code == 200 and response.text.strip().startswith("<"):
             return response.text
         else:
-            raise Exception("GROBID did not return valid TEI XML")
+            raise Exception(
+                f"GROBID did not return valid TEI XML. "
+                f"Status: {response.status_code}, "
+                f"Response: {response.text[:500]}"
+            )
 
 def extract_text_from_pdf(pdf_path, max_chars=1500):
     doc = fitz.open(pdf_path)
